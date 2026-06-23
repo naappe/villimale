@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MDP Campaign Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    /* ============================================
+       ROOT VARIABLES
+       ============================================ */
+    :root {
+      --primary: #4F46E5;
+      --primary-dark: #4338CA;
+      --primary-light: #818CF8;
+      --success: #10B981;
+      --warning: #F59E0B;
+      --danger: #EF4444;
+      --gray-50: #F9FAFB;
+      --gray-100: #F3F4F6;
+      --gray-200: #E5E7EB;
+      --gray-300: #D1D5DB;
+      --gray-400: #9CA3AF;
+      --gray-500: #6B7280;
+      --gray-600: #4B5563;
+      --gray-700: #374151;
+      --gray-800: #1F2937;
+      --gray-900: #111827;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+      --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+      --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+      --radius: 12px;
+      --radius-sm: 8px;
+      --transition: all 0.2s ease;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-800);
+      line-height: 1.6;
+    }
+
+    .app { min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* ============================================
+       NAVBAR
+       ============================================ */
+    .navbar {
+      background: white;
+      border-bottom: 1px solid var(--gray-200);
+      padding: 0 24px;
+      height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .navbar-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 700;
+      font-size: 20px;
+      color: var(--gray-900);
+    }
+
+    .navbar-brand .logo {
+      width: 40px;
+      height: 40px;
+      background: var(--primary);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .navbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .navbar-actions .badge {
+      background: var(--gray-100);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      color: var(--gray-600);
+    }
+
+    .navbar-actions .badge strong { color: var(--gray-800); }
+
+    .btn {
+      padding: 8px 18px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-dark); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+
+    .btn-success { background: var(--success); color: white; }
+    .btn-success:hover { background: #059669; }
+
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-danger:hover { background: #DC2626; }
+
+    .btn-warning { background: var(--warning); color: white; }
+    .btn-warning:hover { background: #D97706; }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--gray-600);
+      border: 1px solid var(--gray-300);
+    }
+    .btn-outline:hover { background: var(--gray-100); }
+
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+    /* ============================================
+       MAIN CONTENT
+       ============================================ */
+    .main {
+      flex: 1;
+      padding: 24px;
+      max-width: 1600px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* ============================================
+       STATS CARDS
+       ============================================ */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: white;
+      padding: 16px 20px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      border: 1px solid var(--gray-200);
+      transition: var(--transition);
+      cursor: pointer;
+    }
+
+    .stat-card:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+    }
+
+    .stat-card .label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--gray-500);
+    }
+
+    .stat-card .value {
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--gray-900);
+      margin-top: 2px;
+    }
+
+    .stat-card .sub {
+      font-size: 12px;
+      color: var(--gray-500);
+      margin-top: 2px;
+    }
+
+    .stat-card .icon {
+      float: right;
+      font-size: 24px;
+      opacity: 0.6;
+    }
+
+    .stat-card.primary .value { color: var(--primary); }
+    .stat-card.success .value { color: var(--success); }
+    .stat-card.warning .value { color: var(--warning); }
+    .stat-card.danger .value { color: var(--danger); }
+
+    /* ============================================
+       TOOLBAR
+       ============================================ */
+    .toolbar {
+      background: white;
+      padding: 16px 20px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      border: 1px solid var(--gray-200);
+      margin-bottom: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .toolbar .search-box {
+      flex: 1;
+      min-width: 180px;
+      position: relative;
+    }
+
+    .toolbar .search-box input {
+      width: 100%;
+      padding: 10px 16px 10px 38px;
+      border: 1px solid var(--gray-300);
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      transition: var(--transition);
+      background: var(--gray-50);
+    }
+
+    .toolbar .search-box input:focus {
+      outline: none;
+      border-color: var(--primary);
+      background: white;
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+    }
+
+    .toolbar .search-box .search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--gray-400);
+      font-size: 14px;
+    }
+
+    .toolbar .filter-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar select {
+      padding: 10px 14px;
+      border: 1px solid var(--gray-300);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      background: var(--gray-50);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .toolbar select:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .toolbar .bulk-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      padding-left: 12px;
+      border-left: 1px solid var(--gray-200);
+    }
+
+    /* ============================================
+       TABLE
+       ============================================ */
+    .table-container {
+      background: white;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      border: 1px solid var(--gray-200);
+      overflow: hidden;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    thead {
+      background: var(--gray-50);
+      border-bottom: 2px solid var(--gray-200);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    th {
+      padding: 10px 12px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--gray-500);
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+      transition: var(--transition);
+    }
+
+    th:hover { color: var(--gray-700); }
+
+    th .sort-icon {
+      margin-left: 4px;
+      opacity: 0.4;
+    }
+
+    td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--gray-100);
+      vertical-align: middle;
+    }
+
+    td .editable {
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: var(--transition);
+      min-width: 40px;
+      display: inline-block;
+    }
+
+    td .editable:hover {
+      background: var(--gray-100);
+    }
+
+    td .editable:focus {
+      outline: 2px solid var(--primary);
+      background: white;
+    }
+
+    tbody tr {
+      transition: var(--transition);
+    }
+
+    tbody tr:hover { background: var(--gray-50); }
+    tbody tr:last-child td { border-bottom: none; }
+
+    /* ============================================
+       BADGES
+       ============================================ */
+    .badge-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .badge-status .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .badge-priority-high { background: #FEE2E2; color: #DC2626; }
+    .badge-priority-high .dot { background: #DC2626; }
+    .badge-priority-medium { background: #FEF3C7; color: #D97706; }
+    .badge-priority-medium .dot { background: #D97706; }
+    .badge-priority-low { background: #D1FAE5; color: #059669; }
+    .badge-priority-low .dot { background: #059669; }
+
+    .badge-boolean {
+      font-size: 16px;
+      cursor: pointer;
+      transition: var(--transition);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .badge-boolean:hover {
+      background: var(--gray-100);
+    }
+
+    .badge-boolean.true { color: var(--success); }
+    .badge-boolean.false { color: var(--gray-300); }
+
+    /* ============================================
+       MODAL
+       ============================================ */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      backdrop-filter: blur(4px);
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal {
+      background: white;
+      border-radius: var(--radius);
+      padding: 32px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .modal h2 {
+      margin-bottom: 20px;
+      color: var(--gray-900);
+    }
+
+    .modal .form-group {
+      margin-bottom: 16px;
+    }
+
+    .modal .form-group label {
+      display: block;
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--gray-700);
+      margin-bottom: 4px;
+    }
+
+    .modal .form-group input,
+    .modal .form-group select,
+    .modal .form-group textarea {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--gray-300);
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      transition: var(--transition);
+    }
+
+    .modal .form-group input:focus,
+    .modal .form-group select:focus,
+    .modal .form-group textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+    }
+
+    .modal .form-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+      justify-content: flex-end;
+    }
+
+    /* ============================================
+       TOAST NOTIFICATIONS
+       ============================================ */
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast {
+      padding: 12px 20px;
+      border-radius: var(--radius-sm);
+      color: white;
+      font-weight: 500;
+      font-size: 14px;
+      box-shadow: var(--shadow-lg);
+      animation: slideIn 0.3s ease;
+      min-width: 200px;
+    }
+
+    .toast-success { background: var(--success); }
+    .toast-error { background: var(--danger); }
+    .toast-info { background: var(--primary); }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    /* ============================================
+       CHECKBOX
+       ============================================ */
+    .row-checkbox {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      accent-color: var(--primary);
+    }
+
+    .select-all {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      accent-color: var(--primary);
+    }
+
+    /* ============================================
+       LOADING & EMPTY
+       ============================================ */
+    .loading-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 20px;
+      gap: 16px;
+    }
+
+    .loading-state .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--gray-200);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-state p { color: var(--gray-500); font-size: 14px; }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+    }
+
+    .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+    .empty-state h3 { font-size: 20px; color: var(--gray-700); margin-bottom: 8px; }
+    .empty-state p { color: var(--gray-500); max-width: 400px; margin: 0 auto; }
+
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 4px;
+    }
+    .status-dot.connected { background: var(--success); }
+    .status-dot.voicemail { background: var(--warning); }
+    .status-dot.no-answer { background: var(--danger); }
+
+    /* ============================================
+       RESPONSIVE
+       ============================================ */
+    @media (max-width: 768px) {
+      .navbar { padding: 0 16px; height: auto; min-height: 60px; flex-wrap: wrap; gap: 8px; padding: 8px 16px; }
+      .navbar-brand { font-size: 16px; }
+      .navbar-brand .logo { width: 32px; height: 32px; font-size: 16px; }
+      .main { padding: 16px; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .stat-card { padding: 12px 16px; }
+      .stat-card .value { font-size: 20px; }
+      .toolbar { flex-direction: column; }
+      .toolbar .search-box { width: 100%; }
+      .toolbar .filter-group { width: 100%; flex-wrap: wrap; }
+      .toolbar select { flex: 1; min-width: 100px; }
+      .toolbar .bulk-actions { width: 100%; border-left: none; padding-left: 0; border-top: 1px solid var(--gray-200); padding-top: 12px; flex-wrap: wrap; }
+      th, td { padding: 6px 8px; font-size: 11px; }
+      .table-container { border-radius: 0; }
+      .modal { padding: 20px; }
+    }
+
+    @media (max-width: 480px) {
+      .stats-grid { grid-template-columns: 1fr; }
+      .navbar-actions .badge { display: none; }
+    }
+
+    .table-wrapper::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    .table-wrapper::-webkit-scrollbar-track {
+      background: var(--gray-100);
+    }
+    .table-wrapper::-webkit-scrollbar-thumb {
+      background: var(--gray-300);
+      border-radius: 10px;
+    }
+    .table-wrapper::-webkit-scrollbar-thumb:hover {
+      background: var(--gray-400);
+    }
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <div class="navbar-brand">
+      <div class="logo">🗳️</div>
+      <span>MDP Campaign</span>
+    </div>
+    <div class="navbar-actions">
+      <span class="badge">📊 <strong id="total-count">0</strong> voters</span>
+      <button class="btn btn-success" onclick="openAddModal()">➕ Add Voter</button>
+      <button class="btn btn-primary" onclick="loadData()">🔄 Refresh</button>
+      <button class="btn btn-outline" onclick="exportCSV()">📥 Export</button>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main">
+    <!-- STATS -->
+    <section class="stats-grid">
+      <div class="stat-card primary" onclick="clearFilters()">
+        <span class="icon">👥</span>
+        <div class="label">Total Voters</div>
+        <div class="value" id="stat-total">0</div>
+        <div class="sub">All records</div>
+      </div>
+      <div class="stat-card success" onclick="filterByStatus('called')">
+        <span class="icon">📞</span>
+        <div class="label">Called</div>
+        <div class="value" id="stat-called">0</div>
+        <div class="sub" id="stat-called-pct">0%</div>
+      </div>
+      <div class="stat-card warning" onclick="filterByStatus('door')">
+        <span class="icon">🚪</span>
+        <div class="label">Door Knocked</div>
+        <div class="value" id="stat-doors">0</div>
+        <div class="sub" id="stat-doors-pct">0%</div>
+      </div>
+      <div class="stat-card primary" onclick="filterByStatus('verified')">
+        <span class="icon">✅</span>
+        <div class="label">Phone Verified</div>
+        <div class="value" id="stat-phone-verified">0</div>
+        <div class="sub" id="stat-phone-pct">0%</div>
+      </div>
+      <div class="stat-card success" onclick="filterByStatus('address-verified')">
+        <span class="icon">📍</span>
+        <div class="label">Address Verified</div>
+        <div class="value" id="stat-address-verified">0</div>
+        <div class="sub" id="stat-address-pct">0%</div>
+      </div>
+      <div class="stat-card danger" onclick="filterByStatus('pending')">
+        <span class="icon">⏳</span>
+        <div class="label">Pending Action</div>
+        <div class="value" id="stat-pending">0</div>
+        <div class="sub">Not called/knocked</div>
+      </div>
+    </section>
+
+    <!-- TOOLBAR -->
+    <section class="toolbar">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" placeholder="Search by Name, ID, House, Phone..." />
+      </div>
+      <div class="filter-group">
+        <select id="filter-priority"><option value="">All Priorities</option><option value="High">🔴 High</option><option value="Medium">🟡 Medium</option><option value="Low">🟢 Low</option></select>
+        <select id="filter-status"><option value="">All Status</option><option value="called">📞 Called</option><option value="not-called">📞 Not Called</option><option value="door">🚪 Door Knocked</option><option value="not-door">🚪 Not Knocked</option><option value="verified">✅ Phone Verified</option><option value="not-verified">❌ Not Verified</option></select>
+        <select id="filter-assigned"><option value="">All Assigned</option></select>
+      </div>
+      <div class="bulk-actions">
+        <span style="font-size:12px;color:var(--gray-500);">Bulk:</span>
+        <button class="btn btn-success btn-sm" onclick="bulkAction('called')">📞 Call</button>
+        <button class="btn btn-warning btn-sm" onclick="bulkAction('door')">🚪 Knock</button>
+        <button class="btn btn-danger btn-sm" onclick="bulkDelete()">🗑️ Delete</button>
+      </div>
+    </section>
+
+    <!-- TABLE -->
+    <section class="table-container">
+      <div id="loading-state" class="loading-state"><div class="spinner"></div><p>Loading campaign data...</p></div>
+      <div class="table-wrapper" id="table-wrapper" style="display:none;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:30px;"><input type="checkbox" class="select-all" id="select-all" onchange="toggleAllCheckboxes()" /></th>
+              <th data-sort="row">#</th>
+              <th data-sort="Name">Name</th>
+              <th data-sort="National ID">ID</th>
+              <th data-sort="House">House</th>
+              <th data-sort="Island">Island</th>
+              <th data-sort="Phone">Phone</th>
+              <th data-sort="Support Level">Support</th>
+              <th data-sort="Priority">Priority</th>
+              <th data-sort="Assigned To">Assigned To</th>
+              <th data-sort="Called">📞</th>
+              <th data-sort="Door Knocked">🚪</th>
+              <th data-sort="Phone Verified">✅</th>
+              <th data-sort="Address Verified">📍</th>
+              <th style="width:80px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+      <div id="empty-state" class="empty-state" style="display:none;">
+        <div class="icon">📭</div>
+        <h3>No Data Found</h3>
+        <p>Your "mdp" table is empty. Click "Add Voter" to get started.</p>
+        <button class="btn btn-primary" onclick="openAddModal()" style="margin-top:16px;">➕ Add Voter</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ============================================
+   MODAL - ADD/EDIT
+   ============================================ -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <h2 id="modal-title">Add New Voter</h2>
+    <form id="voter-form" onsubmit="saveVoter(event)">
+      <input type="hidden" id="edit-id" />
+      
+      <div class="form-group">
+        <label>Name *</label>
+        <input type="text" id="form-name" required />
+      </div>
+      <div class="form-group">
+        <label>National ID *</label>
+        <input type="text" id="form-national-id" required />
+      </div>
+      <div class="form-group">
+        <label>House</label>
+        <input type="text" id="form-house" />
+      </div>
+      <div class="form-group">
+        <label>Island</label>
+        <input type="text" id="form-island" />
+      </div>
+      <div class="form-group">
+        <label>Phone</label>
+        <input type="text" id="form-phone" />
+      </div>
+      <div class="form-group">
+        <label>Support Level (1-5)</label>
+        <input type="number" id="form-support" min="1" max="5" />
+      </div>
+      <div class="form-group">
+        <label>Priority</label>
+        <select id="form-priority"><option value="">None</option><option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option></select>
+      </div>
+      <div class="form-group">
+        <label>Assigned To</label>
+        <input type="text" id="form-assigned" />
+      </div>
+      <div class="form-group">
+        <label>Remarks</label>
+        <textarea id="form-remarks" rows="2"></textarea>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">💾 Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- ============================================
+   JAVASCRIPT
+   ============================================ -->
+<script>
+  // ============================================
+  // SUPABASE CONFIG
+  // ============================================
+  const SUPABASE_URL = 'https://espezmdpkoixnfchomqb.supabase.co'
+  const SUPABASE_ANON_KEY = 'sb_publishable_WGCfJEodLRBVaAHp2jR7VA_hpERDM4H'
+
+  const { createClient } = supabase
+  const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+  // ============================================
+  // STATE
+  // ============================================
+  let allData = []
+  let selectedIds = new Set()
+  let sortField = 'House'
+  let sortAsc = true
+
+  // ============================================
+  // DOM REFS
+  // ============================================
+  const $ = id => document.getElementById(id)
+  const loadingState = $('loading-state')
+  const tableWrapper = $('table-wrapper')
+  const emptyState = $('empty-state')
+  const tbody = $('table-body')
+  const searchInput = $('search-input')
+  const filterPriority = $('filter-priority')
+  const filterStatus = $('filter-status')
+  const filterAssigned = $('filter-assigned')
+
+  // ============================================
+  // TOAST NOTIFICATIONS
+  // ============================================
+  function showToast(message, type = 'success') {
+    const container = $('toast-container')
+    const toast = document.createElement('div')
+    toast.className = `toast toast-${type}`
+    toast.textContent = message
+    container.appendChild(toast)
+    setTimeout(() => {
+      toast.style.opacity = '0'
+      toast.style.transform = 'translateX(100%)'
+      setTimeout(() => toast.remove(), 300)
+    }, 3000)
+  }
+
+  // ============================================
+  // LOAD DATA
+  // ============================================
+  async function loadData() {
+    loadingState.style.display = 'flex'
+    tableWrapper.style.display = 'none'
+    emptyState.style.display = 'none'
+
+    try {
+      const { data, error } = await client
+        .from('mdp')
+        .select('*')
+        .order('House', { ascending: true })
+
+      if (error) throw error
+
+      allData = data || []
+      populateAssignedFilter()
+      render()
+      updateStats()
+
+      loadingState.style.display = 'none'
+      if (allData.length === 0) {
+        emptyState.style.display = 'block'
+      } else {
+        tableWrapper.style.display = 'block'
+      }
+    } catch (err) {
+      console.error(err)
+      loadingState.innerHTML = `
+        <p style="color:#EF4444;">❌ Error: ${err.message}</p>
+        <button class="btn btn-primary" onclick="loadData()">🔄 Retry</button>
+      `
+      loadingState.style.display = 'flex'
+    }
+  }
+
+  // ============================================
+  // POPULATE ASSIGNED FILTER
+  // ============================================
+  function populateAssignedFilter() {
+    const assigned = new Set()
+    allData.forEach(row => { if (row['Assigned To']) assigned.add(row['Assigned To']) })
+    const sorted = ['', ...Array.from(assigned).sort()]
+    filterAssigned.innerHTML = sorted.map(name =>
+      `<option value="${name}">${name || 'All Assigned'}</option>`
+    ).join('')
+  }
+
+  // ============================================
+  // RENDER TABLE
+  // ============================================
+  function render() {
+    const data = applyFiltersAndSort()
+
+    if (data.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="15" style="text-align:center;padding:40px;color:var(--gray-500);">No matching records</td></tr>`
+      return
+    }
+
+    tbody.innerHTML = data.map((row, index) => {
+      const priority = row.Priority || ''
+      const priorityClass = priority.toLowerCase()
+
+      return `
+        <tr>
+          <td><input type="checkbox" class="row-checkbox" data-id="${row['National ID']}" onchange="toggleCheckbox('${row['National ID']}')" /></td>
+          <td>${index + 1}</td>
+          <td><strong>${escapeHtml(row.Name || '')}</strong></td>
+          <td>${escapeHtml(row['National ID'] || '')}</td>
+          <td>${escapeHtml(row.House || '')}</td>
+          <td>${escapeHtml(row.Island || '')}</td>
+          <td>${escapeHtml(row.Phone || '')}</td>
+          <td>${row['Support Level'] || ''}</td>
+          <td>${priority ? `<span class="badge-status badge-priority-${priorityClass}"><span class="dot"></span>${priority}</span>` : ''}</td>
+          <td>${escapeHtml(row['Assigned To'] || '')}</td>
+          <td class="badge-boolean ${row.Called ? 'true' : 'false'}" onclick="toggleField('${row['National ID']}','Called')">${row.Called ? '✅' : '⬜'}</td>
+          <td class="badge-boolean ${row['Door Knocked'] ? 'true' : 'false'}" onclick="toggleField('${row['National ID']}','Door Knocked')">${row['Door Knocked'] ? '✅' : '⬜'}</td>
+          <td class="badge-boolean ${row['Phone Verified'] ? 'true' : 'false'}" onclick="toggleField('${row['National ID']}','Phone Verified')">${row['Phone Verified'] ? '✅' : '⬜'}</td>
+          <td class="badge-boolean ${row['Address Verified'] ? 'true' : 'false'}" onclick="toggleField('${row['National ID']}','Address Verified')">${row['Address Verified'] ? '✅' : '⬜'}</td>
+          <td>
+            <button class="btn btn-primary btn-sm" onclick="openEditModal('${row['National ID']}')">✏️</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteRecord('${row['National ID']}')">🗑️</button>
+          </td>
+        </tr>
+      `
+    }).join('')
+  }
+
+  // ============================================
+  // FILTERS & SORT
+  // ============================================
+  function applyFiltersAndSort() {
+    let data = [...allData]
+
+    const search = searchInput.value.toLowerCase().trim()
+    if (search) {
+      data = data.filter(row => {
+        const fields = ['Name', 'National ID', 'House', 'Island', 'Phone', 'Assigned To']
+        return fields.some(f => { const val = row[f]; return val && String(val).toLowerCase().includes(search) })
+      })
+    }
+
+    const priority = filterPriority.value
+    if (priority) data = data.filter(row => row.Priority === priority)
+
+    const status = filterStatus.value
+    if (status) {
+      switch (status) {
+        case 'called': data = data.filter(r => r.Called); break
+        case 'not-called': data = data.filter(r => !r.Called); break
+        case 'door': data = data.filter(r => r['Door Knocked']); break
+        case 'not-door': data = data.filter(r => !r['Door Knocked']); break
+        case 'verified': data = data.filter(r => r['Phone Verified']); break
+        case 'not-verified': data = data.filter(r => !r['Phone Verified']); break
+        case 'address-verified': data = data.filter(r => r['Address Verified']); break
+        case 'pending': data = data.filter(r => !r.Called && !r['Door Knocked']); break
+      }
+    }
+
+    const assigned = filterAssigned.value
+    if (assigned) data = data.filter(row => row['Assigned To'] === assigned)
+
+    if (sortField !== 'row') {
+      data.sort((a, b) => {
+        let va = a[sortField] ?? '', vb = b[sortField] ?? ''
+        if (typeof va === 'string') va = va.toLowerCase()
+        if (typeof vb === 'string') vb = vb.toLowerCase()
+        if (va < vb) return sortAsc ? -1 : 1
+        if (va > vb) return sortAsc ? 1 : -1
+        return 0
+      })
+    }
+
+    return data
+  }
+
+  // ============================================
+  // UPDATE STATS
+  // ============================================
+  function updateStats() {
+    const total = allData.length
+    const called = allData.filter(r => r.Called).length
+    const doors = allData.filter(r => r['Door Knocked']).length
+    const phoneVerified = allData.filter(r => r['Phone Verified']).length
+    const addressVerified = allData.filter(r => r['Address Verified']).length
+    const pending = allData.filter(r => !r.Called && !r['Door Knocked']).length
+
+    $('stat-total').textContent = total
+    $('stat-called').textContent = called
+    $('stat-called-pct').textContent = total ? `${Math.round(called/total*100)}%` : '0%'
+    $('stat-doors').textContent = doors
+    $('stat-doors-pct').textContent = total ? `${Math.round(doors/total*100)}%` : '0%'
+    $('stat-phone-verified').textContent = phoneVerified
+    $('stat-phone-pct').textContent = total ? `${Math.round(phoneVerified/total*100)}%` : '0%'
+    $('stat-address-verified').textContent = addressVerified
+    $('stat-address-pct').textContent = total ? `${Math.round(addressVerified/total*100)}%` : '0%'
+    $('stat-pending').textContent = pending
+    $('total-count').textContent = total
+  }
+
+  // ============================================
+  // FILTER HELPERS
+  // ============================================
+  function clearFilters() {
+    searchInput.value = ''
+    filterPriority.value = ''
+    filterStatus.value = ''
+    filterAssigned.value = ''
+    render()
+    updateStats()
+  }
+
+  function filterByStatus(status) {
+    filterStatus.value = status
+    render()
+    updateStats()
+  }
+
+  // ============================================
+  // TOGGLE FIELDS (Inline Editing)
+  // ============================================
+  async function toggleField(nationalId, field) {
+    const row = allData.find(r => r['National ID'] === nationalId)
+    if (!row) return
+
+    const newValue = !row[field]
+    
+    try {
+      const { error } = await client
+        .from('mdp')
+        .update({ [field]: newValue })
+        .eq('National ID', nationalId)
+
+      if (error) throw error
+
+      row[field] = newValue
+      render()
+      updateStats()
+      showToast(`${field} updated to ${newValue ? '✅' : '⬜'}`, 'success')
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error')
+    }
+  }
+
+  // ============================================
+  // CHECKBOX SELECTION
+  // ============================================
+  function toggleCheckbox(id) {
+    if (selectedIds.has(id)) selectedIds.delete(id)
+    else selectedIds.add(id)
+    updateSelectAllState()
+  }
+
+  function toggleAllCheckboxes() {
+    const checked = document.getElementById('select-all').checked
+    const data = applyFiltersAndSort()
+    if (checked) {
+      data.forEach(row => selectedIds.add(row['National ID']))
+    } else {
+      selectedIds.clear()
+    }
+    render()
+  }
+
+  function updateSelectAllState() {
+    const data = applyFiltersAndSort()
+    const allChecked = data.every(row => selectedIds.has(row['National ID']))
+    document.getElementById('select-all').checked = allChecked && data.length > 0
+  }
+
+  // ============================================
+  // BULK ACTIONS
+  // ============================================
+  async function bulkAction(action) {
+    if (selectedIds.size === 0) {
+      showToast('Select at least one voter', 'error')
+      return
+    }
+
+    if (!confirm(`Mark ${selectedIds.size} voters as ${action}?`)) return
+
+    const field = action === 'called' ? 'Called' : 'Door Knocked'
+    const updates = Array.from(selectedIds).map(id => ({
+      'National ID': id,
+      [field]: true
+    }))
+
+    try {
+      for (const update of updates) {
+        const { error } = await client
+          .from('mdp')
+          .update({ [field]: true })
+          .eq('National ID', update['National ID'])
+        if (error) throw error
+      }
+
+      // Update local data
+      allData.forEach(row => {
+        if (selectedIds.has(row['National ID'])) {
+          row[field] = true
+        }
+      })
+
+      selectedIds.clear()
+      render()
+      updateStats()
+      showToast(`✅ ${updates.length} voters updated`, 'success')
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error')
+    }
+  }
+
+  async function bulkDelete() {
+    if (selectedIds.size === 0) {
+      showToast('Select at least one voter to delete', 'error')
+      return
+    }
+
+    if (!confirm(`⚠️ Delete ${selectedIds.size} voters? This cannot be undone!`)) return
+
+    try {
+      for (const id of selectedIds) {
+        const { error } = await client
+          .from('mdp')
+          .delete()
+          .eq('National ID', id)
+        if (error) throw error
+      }
+
+      allData = allData.filter(row => !selectedIds.has(row['National ID']))
+      selectedIds.clear()
+      render()
+      updateStats()
+      showToast(`🗑️ Deleted ${selectedIds.size} voters`, 'success')
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error')
+    }
+  }
+
+  // ============================================
+  // DELETE SINGLE RECORD
+  // ============================================
+  async function deleteRecord(nationalId) {
+    if (!confirm(`Delete voter ${nationalId}?`)) return
+
+    try {
+      const { error } = await client
+        .from('mdp')
+        .delete()
+        .eq('National ID', nationalId)
+
+      if (error) throw error
+
+      allData = allData.filter(row => row['National ID'] !== nationalId)
+      render()
+      updateStats()
+      showToast('🗑️ Record deleted', 'success')
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error')
+    }
+  }
+
+  // ============================================
+  // MODAL - ADD/EDIT
+  // ============================================
+  function openAddModal() {
+    $('modal-title').textContent = 'Add New Voter'
+    $('edit-id').value = ''
+    $('voter-form').reset()
+    $('modal-overlay').classList.add('active')
+  }
+
+  function openEditModal(nationalId) {
+    const row = allData.find(r => r['National ID'] === nationalId)
+    if (!row) return
+
+    $('modal-title').textContent = 'Edit Voter'
+    $('edit-id').value = nationalId
+    $('form-name').value = row.Name || ''
+    $('form-national-id').value = row['National ID'] || ''
+    $('form-house').value = row.House || ''
+    $('form-island').value = row.Island || ''
+    $('form-phone').value = row.Phone || ''
+    $('form-support').value = row['Support Level'] || ''
+    $('form-priority').value = row.Priority || ''
+    $('form-assigned').value = row['Assigned To'] || ''
+    $('form-remarks').value = row.Remarks || ''
+    $('modal-overlay').classList.add('active')
+  }
+
+  function closeModal() {
+    $('modal-overlay').classList.remove('active')
+  }
+
+  async function saveVoter(e) {
+    e.preventDefault()
+
+    const nationalId = $('edit-id').value
+    const data = {
+      'Name': $('form-name').value.trim(),
+      'National ID': $('form-national-id').value.trim(),
+      'House': $('form-house').value.trim(),
+      'Island': $('form-island').value.trim(),
+      'Phone': $('form-phone').value.trim(),
+      'Support Level': parseInt($('form-support').value) || null,
+      'Priority': $('form-priority').value || null,
+      'Assigned To': $('form-assigned').value.trim() || null,
+      'Remarks': $('form-remarks').value.trim() || null
+    }
+
+    try {
+      let result
+      if (nationalId) {
+        // Update
+        result = await client
+          .from('mdp')
+          .update(data)
+          .eq('National ID', nationalId)
+      } else {
+        // Insert
+        result = await client
+          .from('mdp')
+          .insert([data])
+      }
+
+      if (result.error) throw result.error
+
+      closeModal()
+      loadData()
+      showToast(nationalId ? '✅ Record updated' : '✅ Voter added', 'success')
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error')
+    }
+  }
+
+  // ============================================
+  // EXPORT CSV
+  // ============================================
+  function exportCSV() {
+    if (allData.length === 0) { alert('No data to export.'); return }
+    const headers = ['Name','National ID','House','Island','Phone','Support Level','Priority','Assigned To','Called','Door Knocked','Phone Verified','Address Verified','Remarks']
+    let csv = headers.join(',') + '\n'
+    allData.forEach(row => {
+      const values = headers.map(h => {
+        let val = row[h] ?? ''
+        if (typeof val === 'string' && val.includes(',')) val = `"${val}"`
+        return val
+      })
+      csv += values.join(',') + '\n'
+    })
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `mdp-campaign-${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // ============================================
+  // UI HELPERS
+  // ============================================
+  function escapeHtml(text) {
+    if (!text) return ''
+    const div = document.createElement('div')
+    div.textContent = text
+    return div.innerHTML
+  }
+
+  // ============================================
+  // EVENT LISTENERS
+  // ============================================
+  searchInput.addEventListener('input', () => { render(); updateStats() })
+  filterPriority.addEventListener('change', () => { render(); updateStats() })
+  filterStatus.addEventListener('change', () => { render(); updateStats() })
+  filterAssigned.addEventListener('change', () => { render(); updateStats() })
+
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const field = th.dataset.sort
+      if (sortField === field) sortAsc = !sortAsc
+      else { sortField = field; sortAsc = true }
+      render()
+    })
+    th.style.cursor = 'pointer'
+  })
+
+  // Keyboard shortcut: Escape closes modal
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeModal()
+  })
+
+  // ============================================
+  // INIT
+  // ============================================
+  document.addEventListener('DOMContentLoaded', loadData)
+  console.log('🚀 MDP Campaign Dashboard loaded with full functionality!')
+</script>
+
+</body>
+</html>
