@@ -36,6 +36,7 @@ const pageSize = 25;
 let galleryPage = 1;
 const galleryPageSize = 30;
 let topHousesCollapsed = false;
+let isLoading = false;
 
 // ============================================
 // DOM ELEMENTS
@@ -117,47 +118,82 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ============================================
-// CHECK SUPABASE LIMITS
-// ============================================
-async function checkSupabaseLimits() {
-    try {
-        const { count, error: countError } = await supabaseClient
-            .from('full_import')
-            .select('*', { count: 'exact', head: true });
-        if (countError) throw countError;
-        return { totalCount: count || 0 };
-    } catch (error) {
-        console.error('Error checking limits:', error);
-        return null;
-    }
-}
-
-// ============================================
-// FETCH VOTERS
+// FETCH ALL VOTERS WITH PAGINATION
 // ============================================
 async function fetchVoters() {
+    if (isLoading) return;
+    isLoading = true;
+
     voterList.innerHTML = '<div class="loading-state">Loading voters...</div>';
 
     try {
-        const { data, error } = await supabaseClient
+        // First, get total count
+        const { count, error: countError } = await supabaseClient
             .from('full_import')
-            .select('*')
-            .order('image_number', { ascending: true });
+            .select('*', { count: 'exact', head: true });
 
-        if (error) throw error;
+        if (countError) throw countError;
+        console.log('📊 Total records in table:', count);
 
-        allVoters = data || [];
+        // Fetch all data using pagination
+        let allData = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+        let totalFetched = 0;
+
+        while (hasMore) {
+            const from = page * pageSize;
+            const to = from + pageSize - 1;
+
+            console.log(`📥 Fetching batch ${page + 1}: rows ${from} to ${to}`);
+
+            const { data, error } = await supabaseClient
+                .from('full_import')
+                .select('*')
+                .range(from, to)
+                .order('image_number', { ascending: true });
+
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                allData = allData.concat(data);
+                totalFetched += data.length;
+                page++;
+            }
+
+            if (!data || data.length < pageSize) {
+                hasMore = false;
+            }
+        }
+
+        console.log('✅ Loaded all voters:', allData.length);
+
+        allVoters = allData || [];
         filteredVoters = [...allVoters];
+
+        // Check if we got all records
+        if (count && allVoters.length < count) {
+            console.warn(`⚠️ Only loaded ${allVoters.length} out of ${count} records!`);
+        }
 
         populateFilters(allVoters);
         renderTopHouses(allVoters);
         updateStats(allVoters);
         renderList(filteredVoters);
 
+        // Update gallery if visible
+        if (gallerySection.style.display !== 'none') {
+            galleryPage = 1;
+            renderGallery(filteredVoters);
+        }
+
     } catch (error) {
-        console.error('Error:', error);
+        console.error('❌ Error fetching voters:', error);
         voterList.innerHTML =
             `<div class="error-box">❌ Failed to load voters.<br /><small>${error.message}</small></div>`;
+    } finally {
+        isLoading = false;
     }
 }
 
@@ -595,6 +631,12 @@ galleryNext.addEventListener('click', () => {
     const totalPages = Math.ceil(filteredVoters.length / galleryPageSize);
     if (galleryPage < totalPages) { galleryPage++; renderGallery(filteredVoters); }
 });
+
+// ============================================
+// DIAGNOSTIC BUTTON (Add to filters if needed)
+// ============================================
+console.log('🔄 Voter Management System loaded');
+console.log('📌 Use the "Gallery View" button to see photos in a grid');
 
 // ============================================
 // INIT
