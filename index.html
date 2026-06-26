@@ -1,602 +1,165 @@
-// ============================================
-// IMPORT CONFIG
-// ============================================
-import { SUPABASE_CONFIG } from './config.js';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Voter Management System</title>
 
-// ============================================
-// HELPER: Normalize Sex
-// ============================================
-function normalizeSex(value) {
-    if (!value) return '';
-    const upper = value.toUpperCase();
-    if (upper === 'M' || upper === 'MALE') return 'Male';
-    if (upper === 'F' || upper === 'FEMALE') return 'Female';
-    if (upper === 'O' || upper === 'OTHER') return 'Other';
-    return value;
-}
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 
-// ============================================
-// INIT SUPABASE
-// ============================================
-if (typeof supabase === 'undefined') {
-    document.getElementById('voterList').innerHTML =
-        '<div class="error-box">❌ Supabase library failed to load.</div>';
-    throw new Error('Supabase library failed to load');
-}
-
-const supabaseClient = supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.publishableKey);
-
-// ============================================
-// STATE
-// ============================================
-let allVoters = [];
-let filteredVoters = [];
-let currentPage = 1;
-const pageSize = 25;
-let galleryPage = 1;
-const galleryPageSize = 30;
-let topHousesCollapsed = false;
-
-// ============================================
-// DOM ELEMENTS
-// ============================================
-const voterList = document.getElementById('voterList');
-const searchInput = document.getElementById('searchInput');
-const sexFilter = document.getElementById('sexFilter');
-const partyFilter = document.getElementById('partyFilter');
-const houseFilter = document.getElementById('houseFilter');
-const ageMin = document.getElementById('ageMin');
-const ageMax = document.getElementById('ageMax');
-const resetBtn = document.getElementById('resetBtn');
-const filterChips = document.getElementById('filterChips');
-
-const totalVoters = document.getElementById('totalVoters');
-const maleCount = document.getElementById('maleCount');
-const femaleCount = document.getElementById('femaleCount');
-const partyCount = document.getElementById('partyCount');
-const avgAge = document.getElementById('avgAge');
-const houseCount = document.getElementById('houseCount');
-const navCount = document.getElementById('navCount');
-const voterCountDisplay = document.getElementById('voterCountDisplay');
-
-const prevPage = document.getElementById('prevPage');
-const nextPage = document.getElementById('nextPage');
-const pageInfo = document.getElementById('pageInfo');
-
-const topHouses = document.getElementById('topHouses');
-const topHousesCount = document.getElementById('topHousesCount');
-const topHousesToggle = document.getElementById('topHousesToggle');
-
-const voterPopup = document.getElementById('voterPopup');
-const voterPopupContent = document.getElementById('voterPopupContent');
-const voterPopupClose = document.getElementById('voterPopupClose');
-
-// Gallery Elements
-const gallerySection = document.getElementById('gallerySection');
-const photoGrid = document.getElementById('photoGrid');
-const galleryCount = document.getElementById('galleryCount');
-const galleryPrev = document.getElementById('galleryPrev');
-const galleryNext = document.getElementById('galleryNext');
-const galleryPageInfo = document.getElementById('galleryPageInfo');
-const listViewBtn = document.getElementById('listViewBtn');
-const galleryViewBtn = document.getElementById('galleryViewBtn');
-
-// ============================================
-// HAMBURGER MENU
-// ============================================
-document.getElementById('hamburger').addEventListener('click', function() {
-    document.getElementById('navLinks').classList.toggle('open');
-});
-
-// ============================================
-// TOP HOUSES COLLAPSIBLE
-// ============================================
-topHousesToggle.addEventListener('click', function() {
-    topHousesCollapsed = !topHousesCollapsed;
-    const grid = document.querySelector('.top-houses-grid');
-    const icon = document.querySelector('.toggle-icon');
-    if (grid) grid.classList.toggle('collapsed');
-    if (icon) icon.classList.toggle('collapsed');
-});
-
-// ============================================
-// POPUP CONTROLS
-// ============================================
-function closePopup() {
-    voterPopup.style.display = 'none';
-    document.body.style.overflow = 'auto';
-}
-
-voterPopupClose.addEventListener('click', closePopup);
-voterPopup.addEventListener('click', function(e) {
-    if (e.target === this) closePopup();
-});
-
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') closePopup();
-});
-
-// ============================================
-// CHECK SUPABASE LIMITS
-// ============================================
-async function checkSupabaseLimits() {
-    try {
-        const { count, error: countError } = await supabaseClient
-            .from('full_import')
-            .select('*', { count: 'exact', head: true });
-        if (countError) throw countError;
-        return { totalCount: count || 0 };
-    } catch (error) {
-        console.error('Error checking limits:', error);
-        return null;
-    }
-}
-
-// ============================================
-// FETCH VOTERS
-// ============================================
-async function fetchVoters() {
-    voterList.innerHTML = '<div class="loading-state">Loading voters...</div>';
-
-    try {
-        const { data, error } = await supabaseClient
-            .from('full_import')
-            .select('*')
-            .order('image_number', { ascending: true });
-
-        if (error) throw error;
-
-        allVoters = data || [];
-        filteredVoters = [...allVoters];
-
-        populateFilters(allVoters);
-        renderTopHouses(allVoters);
-        updateStats(allVoters);
-        renderList(filteredVoters);
-
-    } catch (error) {
-        console.error('Error:', error);
-        voterList.innerHTML =
-            `<div class="error-box">❌ Failed to load voters.<br /><small>${error.message}</small></div>`;
-    }
-}
-
-// ============================================
-// POPULATE FILTERS
-// ============================================
-function populateFilters(voters) {
-    const parties = [...new Set(voters.map(v => v.party).filter(Boolean))].sort();
-    partyFilter.innerHTML = '<option value="">All Parties</option>';
-    parties.forEach(p => {
-        const option = document.createElement('option');
-        option.value = p;
-        option.textContent = p;
-        partyFilter.appendChild(option);
-    });
-
-    const houses = [...new Set(voters.map(v => v.house).filter(Boolean))].sort();
-    houseFilter.innerHTML = '<option value="">All Houses</option>';
-    houses.forEach(h => {
-        const option = document.createElement('option');
-        option.value = h;
-        option.textContent = h;
-        houseFilter.appendChild(option);
-    });
-
-    renderFilterChips(voters);
-}
-
-// ============================================
-// RENDER FILTER CHIPS
-// ============================================
-function renderFilterChips(voters) {
-    const chips = [];
-
-    const males = voters.filter(v => normalizeSex(v.sex) === 'Male').length;
-    const females = voters.filter(v => normalizeSex(v.sex) === 'Female').length;
-    if (males > 0) chips.push({ label: `👨 Male (${males})`, value: 'sex:Male', type: 'sex' });
-    if (females > 0) chips.push({ label: `👩 Female (${females})`, value: 'sex:Female', type: 'sex' });
-
-    const partyCounts = {};
-    voters.forEach(v => {
-        const p = v.party || 'No Party';
-        partyCounts[p] = (partyCounts[p] || 0) + 1;
-    });
-    const topParties = Object.entries(partyCounts).sort((a, b) => b[1] - a[1]).slice(0, 4);
-    topParties.forEach(([party, count]) => {
-        if (party !== 'No Party') {
-            chips.push({ label: `${party} (${count})`, value: `party:${party}`, type: 'party' });
-        }
-    });
-
-    filterChips.innerHTML = chips.map(chip => `
-        <span class="filter-chip" data-value="${chip.value}" data-type="${chip.type}">
-            ${chip.label}
-        </span>
-    `).join('');
-
-    document.querySelectorAll('.filter-chip').forEach(el => {
-        el.addEventListener('click', function() {
-            const [type, value] = this.dataset.value.split(':');
-            applyFilterChip(type, value);
-        });
-    });
-}
-
-// ============================================
-// APPLY FILTER CHIP
-// ============================================
-function applyFilterChip(type, value) {
-    if (type === 'sex') sexFilter.value = value;
-    else if (type === 'party') partyFilter.value = value;
-    else if (type === 'age') {
-        const [min, max] = value.split('-');
-        ageMin.value = min;
-        ageMax.value = max;
-    }
-    filterVoters();
-    document.querySelectorAll('.filter-chip').forEach(el => {
-        el.classList.toggle('active', el.dataset.value === `${type}:${value}`);
-    });
-}
-
-// ============================================
-// UPDATE STATS
-// ============================================
-function updateStats(voters) {
-    const total = voters.length;
-    const males = voters.filter(v => normalizeSex(v.sex) === 'Male').length;
-    const females = voters.filter(v => normalizeSex(v.sex) === 'Female').length;
-    const parties = [...new Set(voters.map(v => v.party).filter(Boolean))];
-    const houses = [...new Set(voters.map(v => v.house).filter(Boolean))];
-    const ages = voters.map(v => parseInt(v.age)).filter(a => a > 0 && a < 120);
-    const avg = ages.length > 0 ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length) : 0;
-
-    totalVoters.textContent = total;
-    maleCount.textContent = males;
-    femaleCount.textContent = females;
-    partyCount.textContent = parties.length;
-    avgAge.textContent = avg;
-    houseCount.textContent = houses.length;
-    navCount.textContent = total;
-}
-
-// ============================================
-// RENDER TOP HOUSES
-// ============================================
-function renderTopHouses(voters) {
-    const houseCounts = {};
-    voters.forEach(v => {
-        if (v.house) {
-            houseCounts[v.house] = (houseCounts[v.house] || 0) + 1;
-        }
-    });
-
-    const top = Object.entries(houseCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
-    topHousesCount.textContent = `(${top.length})`;
-
-    if (top.length === 0) {
-        topHouses.innerHTML = '<div class="no-results">No houses found</div>';
-        return;
-    }
-
-    let html = '';
-    top.forEach(([house, count], index) => {
-        const medals = ['🥇', '🥈', '🥉'];
-        const medal = index < 3 ? medals[index] : `#${index + 1}`;
-        html += `
-            <div class="top-house" data-house="${house}">
-                <span class="house-name">${medal} ${house}</span>
-                <span class="house-count">${count}</span>
-            </div>
-        `;
-    });
-
-    topHouses.innerHTML = html;
-
-    document.querySelectorAll('.top-house').forEach(el => {
-        el.addEventListener('click', function() {
-            houseFilter.value = this.dataset.house;
-            filterVoters();
-        });
-    });
-}
-
-// ============================================
-// SHOW VOTER POPUP
-// ============================================
-function showVoterPopup(voter) {
-    if (!voter) return;
-    document.body.style.overflow = 'hidden';
-
-    const photoUrl = voter.photo_url || '';
-    const sexDisplay = normalizeSex(voter.sex);
-    const partyClass = (voter.party || '').toLowerCase();
-    const address = [voter.house, voter.lives_in].filter(Boolean).join(', ') || 'N/A';
-
-    voterPopupContent.innerHTML = `
-        <div class="popup-photo">
-            ${photoUrl ? 
-                `<img src="${photoUrl}" alt="${voter.name}" 
-                      onerror="this.style.display='none'; this.parentElement.querySelector('.placeholder').style.display='flex';" />` :
-                ''
+    <script type="importmap">
+        {
+            "imports": {
+                "./config.js": "./config.js"
             }
-            <div class="placeholder" style="${photoUrl ? 'display:none;' : 'display:flex;'} align-items:center; justify-content:center; width:100%; height:100%;">
-                📷
-            </div>
-        </div>
-        <div class="popup-name">${voter.name || 'Unknown'}</div>
-        <div class="popup-id">🆔 ${voter.national_id || 'N/A'}</div>
-        <div class="popup-details">
-            <span class="label">Age</span><span class="value">${voter.age || 'N/A'}</span>
-            <span class="label">Sex</span><span class="value">${sexDisplay}</span>
-            <span class="label">Address</span><span class="value">${address}</span>
-            <span class="label">Mobile</span><span class="value">${voter.phone || 'N/A'}</span>
-        </div>
-        ${voter.party ? `<div class="popup-party ${partyClass}">${voter.party}</div>` : ''}
-    `;
-
-    voterPopup.style.display = 'flex';
-}
-
-// ============================================
-// RENDER LIST
-// ============================================
-function renderList(voters) {
-    const totalPages = Math.max(1, Math.ceil(voters.length / pageSize));
-    if (currentPage > totalPages) currentPage = totalPages;
-
-    const start = (currentPage - 1) * pageSize;
-    const end = Math.min(start + pageSize, voters.length);
-    const pageVoters = voters.slice(start, end);
-
-    voterCountDisplay.textContent = `(${voters.length} total)`;
-
-    if (pageVoters.length === 0) {
-        voterList.innerHTML = '<div class="no-results">🔍 No voters found</div>';
-        updatePagination(0, totalPages);
-        return;
-    }
-
-    let html = '';
-    pageVoters.forEach(v => {
-        const photoUrl = v.photo_url || '';
-        const partyClass = (v.party || '').toLowerCase();
-        const sexIcon = normalizeSex(v.sex) === 'Male' ? '♂️' : normalizeSex(v.sex) === 'Female' ? '♀️' : '';
-
-        html += `
-            <div class="voter-item" data-id="${v.id}">
-                <div class="photo">
-                    ${photoUrl ? 
-                        `<img src="${photoUrl}" alt="${v.name}" loading="lazy" 
-                              onerror="this.style.display='none'; this.parentElement.innerHTML='📷';" />` :
-                        '<span class="no-photo">📷</span>'
-                    }
-                </div>
-                <div class="info">
-                    <span class="name">${v.name || 'Unknown'}</span>
-                    <span class="detail"><i class="fas fa-calendar-alt"></i> ${v.age || 'N/A'}</span>
-                    <span class="detail"><i class="fas fa-home"></i> ${v.house || 'N/A'}</span>
-                    ${sexIcon ? `<span class="detail">${sexIcon}</span>` : ''}
-                </div>
-                ${v.party ? `<span class="party-badge ${partyClass}">${v.party}</span>` : ''}
-            </div>
-        `;
-    });
-
-    voterList.innerHTML = html;
-    updatePagination(voters.length, totalPages);
-
-    document.querySelectorAll('.voter-item').forEach(el => {
-        el.addEventListener('click', function() {
-            const id = parseInt(this.dataset.id);
-            const voter = allVoters.find(v => v.id === id);
-            if (voter) showVoterPopup(voter);
-        });
-    });
-}
-
-// ============================================
-// UPDATE PAGINATION
-// ============================================
-function updatePagination(total, totalPages) {
-    prevPage.disabled = currentPage <= 1;
-    nextPage.disabled = currentPage >= totalPages;
-    pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
-}
-
-// ============================================
-// RENDER PHOTO GALLERY
-// ============================================
-function renderGallery(voters) {
-    const totalPages = Math.max(1, Math.ceil(voters.length / galleryPageSize));
-    if (galleryPage > totalPages) galleryPage = totalPages;
-
-    const start = (galleryPage - 1) * galleryPageSize;
-    const end = Math.min(start + galleryPageSize, voters.length);
-    const pageVoters = voters.slice(start, end);
-
-    galleryCount.textContent = `(${voters.length} photos)`;
-
-    if (pageVoters.length === 0) {
-        photoGrid.innerHTML = '<div class="no-results">No photos found</div>';
-        updateGalleryPagination(0, totalPages);
-        return;
-    }
-
-    let html = '';
-    pageVoters.forEach(v => {
-        const photoUrl = v.photo_url || '';
-        const name = v.name || 'Unknown';
-
-        html += `
-            <div class="photo-grid-item" data-id="${v.id}">
-                <div class="photo-wrapper">
-                    ${photoUrl ? 
-                        `<img src="${photoUrl}" alt="${name}" loading="lazy" 
-                              onerror="this.style.display='none'; this.parentElement.querySelector('.photo-placeholder').style.display='flex';" />` :
-                        ''
-                    }
-                    <div class="photo-placeholder" style="${photoUrl ? 'display:none;' : 'display:flex;'} align-items:center; justify-content:center; width:100%; height:100%;">
-                        📷
-                    </div>
-                </div>
-                <div class="photo-name">${name}</div>
-            </div>
-        `;
-    });
-
-    photoGrid.innerHTML = html;
-    updateGalleryPagination(voters.length, totalPages);
-
-    document.querySelectorAll('.photo-grid-item').forEach(el => {
-        el.addEventListener('click', function() {
-            const id = parseInt(this.dataset.id);
-            const voter = allVoters.find(v => v.id === id);
-            if (voter) showVoterPopup(voter);
-        });
-    });
-}
-
-// ============================================
-// UPDATE GALLERY PAGINATION
-// ============================================
-function updateGalleryPagination(total, totalPages) {
-    galleryPrev.disabled = galleryPage <= 1;
-    galleryNext.disabled = galleryPage >= totalPages;
-    galleryPageInfo.textContent = `Page ${galleryPage} of ${totalPages}`;
-}
-
-// ============================================
-// SWITCH VIEWS
-// ============================================
-function showListView() {
-    document.getElementById('listSection').style.display = 'block';
-    gallerySection.style.display = 'none';
-    listViewBtn.classList.add('active');
-    galleryViewBtn.classList.remove('active');
-}
-
-function showGalleryView() {
-    document.getElementById('listSection').style.display = 'none';
-    gallerySection.style.display = 'block';
-    galleryViewBtn.classList.add('active');
-    listViewBtn.classList.remove('active');
-    galleryPage = 1;
-    renderGallery(filteredVoters);
-}
-
-// ============================================
-// FILTER VOTERS
-// ============================================
-function filterVoters() {
-    const search = searchInput.value.toLowerCase().trim();
-    const sex = sexFilter.value;
-    const party = partyFilter.value;
-    const house = houseFilter.value;
-    const minAge = parseInt(ageMin.value);
-    const maxAge = parseInt(ageMax.value);
-
-    filteredVoters = allVoters.filter(v => {
-        let matchSearch = true;
-        if (search) {
-            matchSearch =
-                (v.name && v.name.toLowerCase().includes(search)) ||
-                (v.national_id && v.national_id.toLowerCase().includes(search)) ||
-                (v.house && v.house.toLowerCase().includes(search)) ||
-                (v.lives_in && v.lives_in.toLowerCase().includes(search));
         }
+    </script>
+</head>
+<body>
 
-        let matchSex = true;
-        if (sex) matchSex = normalizeSex(v.sex) === sex;
+    <!-- ============================================
+    NAVIGATION BAR
+    ============================================ -->
+    <nav class="navbar">
+        <div class="logo">
+            <i class="fas fa-vote-yea"></i>
+            Voter<span>Manager</span>
+        </div>
+        <ul class="nav-links" id="navLinks">
+            <li><a href="#" class="active"><i class="fas fa-home"></i> Dashboard</a></li>
+            <li><a href="#"><i class="fas fa-users"></i> Voters <span class="badge" id="navCount">0</span></a></li>
+            <li><a href="#"><i class="fas fa-chart-pie"></i> Analytics</a></li>
+        </ul>
+        <div class="hamburger" id="hamburger">
+            <i class="fas fa-bars"></i>
+        </div>
+    </nav>
 
-        let matchParty = true;
-        if (party) matchParty = (v.party || '') === party;
+    <!-- ============================================
+    MAIN CONTAINER
+    ============================================ -->
+    <div class="container">
 
-        let matchHouse = true;
-        if (house) matchHouse = (v.house || '') === house;
+        <!-- ===== STATS ROW ===== -->
+        <div class="stats-row">
+            <div class="stat-item">
+                <span class="stat-number" id="totalVoters">0</span>
+                <span class="stat-label">Total Voters</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number" id="maleCount">0</span>
+                <span class="stat-label">Male</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number" id="femaleCount">0</span>
+                <span class="stat-label">Female</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number" id="houseCount">0</span>
+                <span class="stat-label">Houses</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number" id="partyCount">0</span>
+                <span class="stat-label">Parties</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number" id="avgAge">0</span>
+                <span class="stat-label">Avg Age</span>
+            </div>
+        </div>
 
-        let matchAge = true;
-        const voterAge = parseInt(v.age);
-        if (!isNaN(minAge) && !isNaN(voterAge)) matchAge = matchAge && voterAge >= minAge;
-        if (!isNaN(maxAge) && !isNaN(voterAge)) matchAge = matchAge && voterAge <= maxAge;
+        <!-- ===== TOP HOUSES ===== -->
+        <div class="top-houses-section">
+            <div class="top-houses-header" id="topHousesToggle">
+                <h2><i class="fas fa-trophy"></i> Top Houses <span id="topHousesCount"></span></h2>
+                <span class="toggle-icon"><i class="fas fa-chevron-down"></i></span>
+            </div>
+            <div class="top-houses-grid" id="topHouses">
+                <div class="loading-state">Loading houses...</div>
+            </div>
+        </div>
 
-        return matchSearch && matchSex && matchParty && matchHouse && matchAge;
-    });
+        <!-- ===== FILTERS ===== -->
+        <div class="filters-bar">
+            <div class="filter-row">
+                <div class="search-wrapper">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" id="searchInput" placeholder="Search name, ID, or house..." />
+                </div>
+                <select id="sexFilter">
+                    <option value="">All Genders</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                </select>
+                <select id="partyFilter">
+                    <option value="">All Parties</option>
+                </select>
+                <select id="houseFilter">
+                    <option value="">All Houses</option>
+                </select>
+                <div class="age-range">
+                    <input type="number" id="ageMin" placeholder="Min" min="0" max="150" />
+                    <span>—</span>
+                    <input type="number" id="ageMax" placeholder="Max" min="0" max="150" />
+                </div>
+                <button class="btn-reset" id="resetBtn"><i class="fas fa-undo"></i></button>
+            </div>
+            <div class="filter-chips" id="filterChips"></div>
+        </div>
 
-    currentPage = 1;
-    renderList(filteredVoters);
-    updateStats(filteredVoters);
-    renderTopHouses(filteredVoters);
+        <!-- ===== VIEW TOGGLE ===== -->
+        <div class="view-toggle-bar">
+            <button class="view-toggle-btn active" id="listViewBtn"><i class="fas fa-list"></i> List</button>
+            <button class="view-toggle-btn" id="galleryViewBtn"><i class="fas fa-images"></i> Gallery</button>
+        </div>
 
-    if (gallerySection.style.display !== 'none') {
-        galleryPage = 1;
-        renderGallery(filteredVoters);
-    }
+        <!-- ===== VOTER LIST VIEW ===== -->
+        <div class="voter-list-section" id="listSection">
+            <div class="list-header">
+                <h2><i class="fas fa-list"></i> Voters <span id="voterCountDisplay"></span></h2>
+            </div>
+            <div id="voterList" class="voter-list">
+                <div class="loading-state">Loading voters...</div>
+            </div>
+            <div class="pagination" id="pagination">
+                <button id="prevPage"><i class="fas fa-chevron-left"></i></button>
+                <span id="pageInfo">Page 1 of 1</span>
+                <button id="nextPage"><i class="fas fa-chevron-right"></i></button>
+            </div>
+        </div>
 
-    document.querySelectorAll('.filter-chip').forEach(el => el.classList.remove('active'));
-}
+        <!-- ===== PHOTO GALLERY VIEW ===== -->
+        <div class="gallery-section" id="gallerySection" style="display:none;">
+            <div class="list-header">
+                <h2><i class="fas fa-images"></i> Photo Gallery <span id="galleryCount"></span></h2>
+            </div>
+            <div class="photo-grid" id="photoGrid">
+                <div class="loading-state">Loading gallery...</div>
+            </div>
+            <div class="pagination" id="galleryPagination">
+                <button id="galleryPrev"><i class="fas fa-chevron-left"></i></button>
+                <span id="galleryPageInfo">Page 1 of 1</span>
+                <button id="galleryNext"><i class="fas fa-chevron-right"></i></button>
+            </div>
+        </div>
 
-// ============================================
-// RESET FILTERS
-// ============================================
-function resetFilters() {
-    searchInput.value = '';
-    sexFilter.value = '';
-    partyFilter.value = '';
-    houseFilter.value = '';
-    ageMin.value = '';
-    ageMax.value = '';
+    </div>
 
-    document.querySelectorAll('.filter-chip').forEach(el => el.classList.remove('active'));
+    <!-- ============================================
+    VOTER POPUP
+    ============================================ -->
+    <div class="voter-popup-overlay" id="voterPopup">
+        <div class="voter-popup">
+            <button class="voter-popup-close" id="voterPopupClose">&times;</button>
+            <div class="voter-popup-content" id="voterPopupContent">
+                <div class="popup-loading">Loading...</div>
+            </div>
+        </div>
+    </div>
 
-    filteredVoters = [...allVoters];
-    currentPage = 1;
-    renderList(filteredVoters);
-    updateStats(filteredVoters);
-    renderTopHouses(filteredVoters);
+    <script type="module" src="app.js"></script>
 
-    if (gallerySection.style.display !== 'none') {
-        galleryPage = 1;
-        renderGallery(filteredVoters);
-    }
-}
-
-// ============================================
-// EVENT LISTENERS
-// ============================================
-searchInput.addEventListener('input', filterVoters);
-sexFilter.addEventListener('change', filterVoters);
-partyFilter.addEventListener('change', filterVoters);
-houseFilter.addEventListener('change', filterVoters);
-ageMin.addEventListener('change', filterVoters);
-ageMax.addEventListener('change', filterVoters);
-
-resetBtn.addEventListener('click', resetFilters);
-
-prevPage.addEventListener('click', () => {
-    if (currentPage > 1) { currentPage--; renderList(filteredVoters); }
-});
-
-nextPage.addEventListener('click', () => {
-    const totalPages = Math.ceil(filteredVoters.length / pageSize);
-    if (currentPage < totalPages) { currentPage++; renderList(filteredVoters); }
-});
-
-// Gallery Events
-listViewBtn.addEventListener('click', showListView);
-galleryViewBtn.addEventListener('click', showGalleryView);
-
-galleryPrev.addEventListener('click', () => {
-    if (galleryPage > 1) { galleryPage--; renderGallery(filteredVoters); }
-});
-
-galleryNext.addEventListener('click', () => {
-    const totalPages = Math.ceil(filteredVoters.length / galleryPageSize);
-    if (galleryPage < totalPages) { galleryPage++; renderGallery(filteredVoters); }
-});
-
-// ============================================
-// INIT
-// ============================================
-fetchVoters();
+</body>
+</html>
