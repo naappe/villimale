@@ -25,7 +25,7 @@ function getSexDisplay(value) {
 // ============================================
 if (typeof supabase === 'undefined') {
     document.getElementById('voterTableBody').innerHTML =
-        '<tr><td colspan="7" class="error-box">❌ Supabase library failed to load.</td></tr>';
+        '<tr><td colspan="6" class="error-box">❌ Supabase library failed to load.</td></tr>';
     throw new Error('Supabase library failed to load');
 }
 
@@ -78,6 +78,7 @@ const topHousesToggle = document.getElementById('topHousesToggle');
 const voterPopup = document.getElementById('voterPopup');
 const voterPopupContent = document.getElementById('voterPopupContent');
 const voterPopupClose = document.getElementById('voterPopupClose');
+const popupBackBtn = document.getElementById('popupBackBtn');
 
 // ============================================
 // HAMBURGER MENU
@@ -98,27 +99,26 @@ topHousesToggle.addEventListener('click', function() {
 });
 
 // ============================================
-// CLOSE POPUP
+// POPUP CONTROLS
 // ============================================
-voterPopupClose.addEventListener('click', function() {
+function closePopup() {
     voterPopup.style.display = 'none';
-});
+    document.body.style.overflow = 'auto';
+}
+
+voterPopupClose.addEventListener('click', closePopup);
+popupBackBtn.addEventListener('click', closePopup);
 
 voterPopup.addEventListener('click', function(e) {
-    if (e.target === this) {
-        this.style.display = 'none';
-    }
+    if (e.target === this) closePopup();
 });
 
-// ESC key to close popup
 document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        voterPopup.style.display = 'none';
-    }
+    if (e.key === 'Escape') closePopup();
 });
 
 // ============================================
-// CHECK SUPABASE LIMITS (Diagnostic)
+// CHECK SUPABASE LIMITS
 // ============================================
 async function checkSupabaseLimits() {
     try {
@@ -160,7 +160,7 @@ async function checkSupabaseLimits() {
 // FETCH ALL VOTERS WITH PAGINATION
 // ============================================
 async function fetchAllVotersWithPagination() {
-    tableBody.innerHTML = '<tr><td colspan="7" class="loading-state">Loading voters in batches...</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="6" class="loading-state">Loading voters in batches...</td></tr>';
 
     try {
         let allData = [];
@@ -207,7 +207,7 @@ async function fetchAllVotersWithPagination() {
     } catch (error) {
         console.error('❌ Error with pagination:', error);
         tableBody.innerHTML =
-            `<tr><td colspan="7" class="error-box">❌ Failed to load voters with pagination.<br /><small>${error.message}</small></td></tr>`;
+            `<tr><td colspan="6" class="error-box">❌ Failed to load voters with pagination.<br /><small>${error.message}</small></td></tr>`;
     }
 }
 
@@ -215,7 +215,7 @@ async function fetchAllVotersWithPagination() {
 // FETCH VOTERS - NO LIMIT
 // ============================================
 async function fetchVoters() {
-    tableBody.innerHTML = '<tr><td colspan="7" class="loading-state">Loading voters...</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="6" class="loading-state">Loading voters...</td></tr>';
 
     try {
         const { data, error } = await supabaseClient
@@ -250,7 +250,7 @@ async function fetchVoters() {
     } catch (error) {
         console.error('❌ Error:', error);
         tableBody.innerHTML =
-            `<tr><td colspan="7" class="error-box">❌ Failed to load voters.<br /><small>${error.message}</small></td></tr>`;
+            `<tr><td colspan="6" class="error-box">❌ Failed to load voters.<br /><small>${error.message}</small></td></tr>`;
     }
 }
 
@@ -258,7 +258,6 @@ async function fetchVoters() {
 // POPULATE FILTERS
 // ============================================
 function populateFilters(voters) {
-    // Party filter
     const parties = [...new Set(voters.map(v => v.party).filter(Boolean))].sort();
     partyFilter.innerHTML = '<option value="">All Parties</option>';
     parties.forEach(p => {
@@ -268,7 +267,6 @@ function populateFilters(voters) {
         partyFilter.appendChild(option);
     });
 
-    // House filter
     const houses = [...new Set(voters.map(v => v.house).filter(Boolean))].sort();
     houseFilter.innerHTML = '<option value="">All Houses</option>';
     houses.forEach(h => {
@@ -481,7 +479,6 @@ function renderTopHouses(voters) {
 
     topHouses.innerHTML = html;
 
-    // Add click listeners to top houses
     document.querySelectorAll('.top-house').forEach(el => {
         el.addEventListener('click', function() {
             const house = this.dataset.house;
@@ -502,17 +499,19 @@ function filterByHouse(house) {
 // ============================================
 // SHOW VOTER POPUP
 // ============================================
-function showVoterPopup(id) {
-    const voter = allVoters.find(v => v.id === id);
+function showVoterPopup(voter) {
     if (!voter) {
-        console.error('Voter not found:', id);
+        console.error('Voter not found');
         return;
     }
+
+    document.body.style.overflow = 'hidden';
 
     const photoUrl = voter.photo_url || '';
     const sexDisplay = getSexDisplay(voter.sex);
     const partyClass = (voter.party || '').toLowerCase();
     const address = [voter.house, voter.lives_in].filter(Boolean).join(', ') || 'N/A';
+    const mobile = voter.phone || 'N/A';
 
     voterPopupContent.innerHTML = `
         <div class="popup-photo">
@@ -535,9 +534,7 @@ function showVoterPopup(id) {
             <span class="label">Address</span>
             <span class="value">${address}</span>
             <span class="label">Mobile</span>
-            <span class="value">${voter.phone || 'N/A'}</span>
-            <span class="label">National ID</span>
-            <span class="value">${voter.national_id || 'N/A'}</span>
+            <span class="value">${mobile}</span>
         </div>
         ${voter.party ? `<div class="popup-party ${partyClass}">${voter.party}</div>` : ''}
     `;
@@ -546,7 +543,7 @@ function showVoterPopup(id) {
 }
 
 // ============================================
-// RENDER TABLE - COMPACT WITH EVENT LISTENERS
+// RENDER TABLE - Click row to open popup
 // ============================================
 function renderTable(voters) {
     const totalPages = Math.max(1, Math.ceil(voters.length / pageSize));
@@ -559,7 +556,7 @@ function renderTable(voters) {
     voterCountDisplay.textContent = `(${voters.length} total)`;
 
     if (pageVoters.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="7" class="no-results">🔍 No voters found.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="6" class="no-results">🔍 No voters found.</td></tr>';
         updatePagination(0, totalPages);
         return;
     }
@@ -571,24 +568,19 @@ function renderTable(voters) {
         const rowNum = start + index + 1;
 
         html += `
-            <tr>
+            <tr data-id="${v.id}">
                 <td>${rowNum}</td>
                 <td class="photo-cell">
                     ${photoUrl ? 
                         `<img src="${photoUrl}" alt="${v.name}" loading="lazy" 
                               onerror="this.style.display='none';" />` :
-                        '📷'
+                        '<span class="no-photo">📷</span>'
                     }
                 </td>
                 <td><strong>${v.name || 'Unknown'}</strong></td>
                 <td>${v.age || 'N/A'}</td>
                 <td>${v.house || 'N/A'}</td>
                 <td>${v.party ? `<span class="party-badge ${partyClass}">${v.party}</span>` : '—'}</td>
-                <td>
-                    <button class="view-btn" data-id="${v.id}">
-                        <i class="fas fa-eye"></i> View
-                    </button>
-                </td>
             </tr>
         `;
     });
@@ -596,11 +588,12 @@ function renderTable(voters) {
     tableBody.innerHTML = html;
     updatePagination(voters.length, totalPages);
 
-    // Add click listeners to view buttons
-    document.querySelectorAll('.view-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
+    // ✅ Click row to open popup
+    document.querySelectorAll('#voterTableBody tr').forEach(row => {
+        row.addEventListener('click', function() {
             const id = parseInt(this.dataset.id);
-            showVoterPopup(id);
+            const voter = allVoters.find(v => v.id === id);
+            if (voter) showVoterPopup(voter);
         });
     });
 }
