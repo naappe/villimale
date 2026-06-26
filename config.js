@@ -8,18 +8,46 @@ const SUPABASE_CONFIG = {
 };
 
 // ============================================
-// ADMIN CONFIGURATION
+// PARTY AUTHENTICATION & DETAILS
 // ============================================
 
-const ADMIN_USERNAME = 'admin';
-const ADMIN_PASSWORD = 'admin123';
+const PARTY_AUTH = {
+    'MDP': {
+        password: 'mdp2024',
+        shortName: 'MDP',
+        fullName: 'Maldivian Democratic Party',
+        color: '#f5a623',
+        lightColor: '#fef5e7',
+        textColor: '#1a1a2e',
+        logo: 'fa-flag',
+        registered: '26 Jun 2005',
+        table: 'full_import',
+        partyColumn: 'party',
+        partyValue: 'MDP'
+    },
+    'PNC': {
+        password: 'pnc2024',
+        shortName: 'PNC',
+        fullName: 'Peoples National Congress',
+        color: '#1abc9c',
+        lightColor: '#e8f8f5',
+        textColor: '#ffffff',
+        logo: 'fa-users',
+        registered: '31 Jan 2019',
+        table: 'full_import',
+        partyColumn: 'party',
+        partyValue: 'PNC'
+    }
+};
 
 // ============================================
-// EXPOSE TO GLOBAL SCOPE (REQUIRED!)
+// EXPOSE TO GLOBAL SCOPE
 // ============================================
 window.SUPABASE_CONFIG = SUPABASE_CONFIG;
-window.ADMIN_USERNAME = ADMIN_USERNAME;
-window.ADMIN_PASSWORD = ADMIN_PASSWORD;
+window.PARTY_AUTH = PARTY_AUTH;
 
-console.log('✅ config.js loaded');
-console.log('🔐 Login with: admin / admin123');
+console.log('✅ Config loaded');
+console.log('🏛️ Parties:', Object.keys(PARTY_AUTH).join(', '));
+console.log('📊 Using table: full_import');
+console.log('🔐 MDP Password: mdp2024');
+console.log('🔐 PNC Password: pnc2024');

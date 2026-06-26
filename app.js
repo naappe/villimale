@@ -1,16 +1,10 @@
 // ============================================
-// CONFIG VALUES (from config.js via window)
+// CONFIG VALUES (from config.js)
 // ============================================
-console.log('✅ app.js loaded');
-
-function normalizeSex(value) {
-    if (!value) return '';
-    const upper = value.toUpperCase();
-    if (upper === 'M' || upper === 'MALE') return 'Male';
-    if (upper === 'F' || upper === 'FEMALE') return 'Female';
-    if (upper === 'O' || upper === 'OTHER') return 'Other';
-    return value;
-}
+const SUPABASE_URL = window.SUPABASE_CONFIG ? window.SUPABASE_CONFIG.url : 'https://espezmdpkoixnfchomqb.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = window.SUPABASE_CONFIG ? window.SUPABASE_CONFIG.publishableKey : 'sb_publishable_xP8z74zcMuCkj6xlu1bJ3w_Kudqbcu1';
+const PARTY_AUTH = window.PARTY_AUTH || {};
+const PARTY_VOTER_COUNTS = window.PARTY_VOTER_COUNTS || {};
 
 // ============================================
 // INIT SUPABASE
@@ -21,10 +15,19 @@ if (typeof supabase === 'undefined') {
     throw new Error('Supabase library failed to load');
 }
 
-var SUPABASE_URL = window.SUPABASE_CONFIG ? window.SUPABASE_CONFIG.url : 'https://espezmdpkoixnfchomqb.supabase.co';
-var SUPABASE_PUBLISHABLE_KEY = window.SUPABASE_CONFIG ? window.SUPABASE_CONFIG.publishableKey : 'sb_publishable_xP8z74zcMuCkj6xlu1bJ3w_Kudqbcu1';
-
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+// ============================================
+// HELPER: Normalize Sex
+// ============================================
+function normalizeSex(value) {
+    if (!value) return '';
+    const upper = value.toUpperCase();
+    if (upper === 'M' || upper === 'MALE') return 'Male';
+    if (upper === 'F' || upper === 'FEMALE') return 'Female';
+    if (upper === 'O' || upper === 'OTHER') return 'Other';
+    return value;
+}
 
 // ============================================
 // STATE
@@ -38,53 +41,29 @@ const galleryPageSize = 30;
 let topHousesCollapsed = false;
 let isLoading = false;
 let ageChartInstance = null;
-let isLoggedIn = false;
-
-// ============================================
-// SESSION MANAGEMENT
-// ============================================
-function saveSession(username) {
-    localStorage.setItem('voterSession', JSON.stringify({
-        username: username,
-        timestamp: Date.now()
-    }));
-}
-
-function clearSession() {
-    localStorage.removeItem('voterSession');
-}
-
-function checkSession() {
-    const sessionData = localStorage.getItem('voterSession');
-    if (sessionData) {
-        try {
-            const session = JSON.parse(sessionData);
-            const sessionAge = Date.now() - session.timestamp;
-            const maxAge = 24 * 60 * 60 * 1000;
-            if (sessionAge < maxAge) {
-                return session.username;
-            } else {
-                clearSession();
-                return null;
-            }
-        } catch (e) {
-            clearSession();
-            return null;
-        }
-    }
-    return null;
-}
+let selectedParty = null;
+let selectedPartyColor = '#f5a623';
+let selectedPartyData = null;
 
 // ============================================
 // DOM ELEMENTS
 // ============================================
-const loginOverlay = document.getElementById('loginOverlay');
-const loginForm = document.getElementById('loginForm');
-const loginUsername = document.getElementById('loginUsername');
-const loginPassword = document.getElementById('loginPassword');
-const loginError = document.getElementById('loginError');
+const partySelection = document.getElementById('partySelection');
+const partyPasswordOverlay = document.getElementById('partyPasswordOverlay');
+const partyPasswordForm = document.getElementById('partyPasswordForm');
+const partyPasswordInput = document.getElementById('partyPasswordInput');
+const partyPasswordError = document.getElementById('partyPasswordError');
+const partyPasswordName = document.getElementById('partyPasswordName');
+const partyPasswordTitle = document.getElementById('partyPasswordTitle');
+const partyPasswordIcon = document.getElementById('partyPasswordIcon');
+const partyRememberMe = document.getElementById('partyRememberMe');
+const backToParties = document.getElementById('backToParties');
+
 const mainApp = document.getElementById('mainApp');
-const rememberMe = document.getElementById('rememberMe');
+const mainNavbar = document.getElementById('mainNavbar');
+const partyLogo = document.getElementById('partyLogo');
+const activePartyBadge = document.getElementById('activePartyBadge');
+const activePartyCount = document.getElementById('activePartyCount');
 
 const voterList = document.getElementById('voterList');
 const searchInput = document.getElementById('searchInput');
@@ -140,67 +119,243 @@ const editParty = document.getElementById('editParty');
 const logoutBtn = document.getElementById('logoutBtn');
 
 // ============================================
-// LOGIN / LOGOUT / SESSION
+// ===== PARTY SESSION MANAGEMENT =====
 // ============================================
-function handleLogin(e) {
-    e.preventDefault();
-    const username = loginUsername.value.trim();
-    const password = loginPassword.value.trim();
+function savePartySession(party) {
+    localStorage.setItem('partySession', JSON.stringify({
+        party: party,
+        timestamp: Date.now()
+    }));
+}
 
-    if (username === window.ADMIN_USERNAME && password === window.ADMIN_PASSWORD) {
-        isLoggedIn = true;
-        if (rememberMe && rememberMe.checked) {
-            saveSession(username);
+function clearPartySession() {
+    localStorage.removeItem('partySession');
+}
+
+function checkPartySession() {
+    const sessionData = localStorage.getItem('partySession');
+    if (sessionData) {
+        try {
+            const session = JSON.parse(sessionData);
+            const sessionAge = Date.now() - session.timestamp;
+            const maxAge = 24 * 60 * 60 * 1000;
+            if (sessionAge < maxAge) {
+                return session.party;
+            } else {
+                clearPartySession();
+                return null;
+            }
+        } catch (e) {
+            clearPartySession();
+            return null;
         }
-        loginOverlay.style.display = 'none';
-        mainApp.style.display = 'block';
-        loginError.style.display = 'none';
-        fetchVoters();
-    } else {
-        loginError.style.display = 'block';
-        loginError.textContent = '❌ Invalid username or password';
-        loginPassword.value = '';
-        loginPassword.focus();
     }
+    return null;
 }
 
-function handleLogout() {
-    isLoggedIn = false;
-    clearSession();
-    mainApp.style.display = 'none';
-    loginOverlay.style.display = 'flex';
-    loginUsername.value = 'admin';
-    loginPassword.value = 'admin123';
-    loginError.style.display = 'none';
-    if (rememberMe) rememberMe.checked = false;
+// ============================================
+// ===== PARTY AUTHENTICATION =====
+// ============================================
+function selectParty(party) {
+    const auth = PARTY_AUTH[party];
+    if (!auth) {
+        alert('Party not found');
+        return;
+    }
+
+    selectedParty = party;
+    selectedPartyData = auth;
+    selectedPartyColor = auth.color;
+
+    // Update password overlay with party colors
+    partyPasswordIcon.style.color = auth.color;
+    partyPasswordName.textContent = party;
+    partyPasswordTitle.textContent = auth.shortName + ' Access';
+
+    // Show password overlay
+    partyPasswordOverlay.classList.add('active');
+    partyPasswordInput.value = '';
+    partyPasswordError.style.display = 'none';
+    partyPasswordInput.focus();
+
+    // Store selected party for password verification
+    partyPasswordOverlay.dataset.party = party;
+    partyPasswordOverlay.dataset.password = auth.password;
 }
 
-function checkLogin() {
-    const savedUsername = checkSession();
-    if (savedUsername) {
-        isLoggedIn = true;
-        loginOverlay.style.display = 'none';
+// Password form submission
+partyPasswordForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const entered = partyPasswordInput.value.trim();
+    const expected = partyPasswordOverlay.dataset.password;
+    const party = partyPasswordOverlay.dataset.party;
+
+    if (entered === expected) {
+        partyPasswordOverlay.classList.remove('active');
+        partyPasswordError.style.display = 'none';
+
+        if (partyRememberMe && partyRememberMe.checked) {
+            savePartySession(party);
+        }
+
+        // Show main app
         mainApp.style.display = 'block';
-        loginUsername.value = savedUsername;
-        fetchVoters();
+        partySelection.classList.add('hidden');
+
+        // Update navbar with party info
+        updatePartyUI(party);
+
+        // Load voters for this party
+        fetchPartyVoters(party);
+
+    } else {
+        partyPasswordError.style.display = 'block';
+        partyPasswordInput.value = '';
+        partyPasswordInput.focus();
+    }
+});
+
+// Back to parties
+backToParties.addEventListener('click', function() {
+    partyPasswordOverlay.classList.remove('active');
+    partySelection.classList.remove('hidden');
+});
+
+// ============================================
+// ===== UPDATE PARTY UI =====
+// ============================================
+function updatePartyUI(party) {
+    const auth = PARTY_AUTH[party];
+    if (!auth) return;
+
+    const color = auth.color;
+    const lightColor = auth.lightColor || '#f5f5f5';
+
+    // Update navbar
+    const logo = document.querySelector('.navbar .logo');
+    logo.style.color = color;
+    logo.querySelector('i').style.color = color;
+
+    // Update party indicator
+    activePartyBadge.textContent = auth.shortName;
+    activePartyBadge.style.color = color;
+
+    const count = PARTY_VOTER_COUNTS[party] || 0;
+    activePartyCount.textContent = count.toLocaleString() + ' voters';
+
+    // Update navbar border with party color
+    document.querySelector('.navbar').style.borderBottom = `2px solid ${color}`;
+
+    // Update password icon color
+    partyPasswordIcon.style.color = color;
+
+    // Update stat items with party color
+    document.querySelectorAll('.stat-item').forEach(el => {
+        el.style.borderLeftColor = color;
+    });
+
+    // Update view toggle buttons
+    document.querySelectorAll('.view-toggle-btn.active').forEach(el => {
+        el.style.background = color;
+        el.style.color = '#1a1a2e';
+    });
+}
+
+// ============================================
+// ===== CHECK SESSION ON LOAD =====
+// ============================================
+function checkSession() {
+    const savedParty = checkPartySession();
+    if (savedParty && PARTY_AUTH[savedParty]) {
+        // Auto-login to party
+        partySelection.classList.add('hidden');
+        mainApp.style.display = 'block';
+        updatePartyUI(savedParty);
+        fetchPartyVoters(savedParty);
         return true;
     }
-    loginOverlay.style.display = 'flex';
-    mainApp.style.display = 'none';
-    isLoggedIn = false;
     return false;
 }
 
 // ============================================
-// HAMBURGER MENU
+// ===== FETCH PARTY VOTERS =====
 // ============================================
+async function fetchPartyVoters(party) {
+    selectedParty = party;
+    const auth = PARTY_AUTH[party];
+    selectedPartyColor = auth ? auth.color : '#f5a623';
+    selectedPartyData = auth;
+
+    voterList.innerHTML = '<div class="loading-state">Loading voters...</div>';
+
+    try {
+        const { data, error } = await supabaseClient
+            .from('full_import')
+            .select('*')
+            .ilike('party', party)
+            .order('image_number', { ascending: true });
+
+        if (error) throw error;
+
+        allVoters = data || [];
+        filteredVoters = [...allVoters];
+
+        // Update party filter to show only current party
+        partyFilter.innerHTML = `<option value="${party}" selected>${party}</option>`;
+
+        populateFilters(allVoters);
+        renderTopHouses(allVoters);
+        updateStats(allVoters);
+        renderAgeAnalytics(allVoters);
+        renderList(filteredVoters);
+
+        if (gallerySection.style.display !== 'none') {
+            galleryPage = 1;
+            renderGallery(filteredVoters);
+        }
+
+        // Update voter count in navbar
+        const count = allVoters.length;
+        activePartyCount.textContent = count.toLocaleString() + ' voters';
+
+    } catch (error) {
+        console.error('Error:', error);
+        voterList.innerHTML =
+            `<div class="error-box">❌ Failed to load voters.<br /><small>${error.message}</small></div>`;
+    }
+}
+
+// ============================================
+// ===== LOGOUT =====
+// ============================================
+logoutBtn.addEventListener('click', function() {
+    clearPartySession();
+    mainApp.style.display = 'none';
+    partySelection.classList.remove('hidden');
+    partyPasswordOverlay.classList.remove('active');
+    selectedParty = null;
+    selectedPartyData = null;
+
+    // Reset navbar
+    const logo = document.querySelector('.navbar .logo');
+    logo.style.color = '';
+    logo.querySelector('i').style.color = '';
+    document.querySelector('.navbar').style.borderBottom = '';
+
+    console.log('🔐 Logged out from party');
+});
+
+// ============================================
+// ===== REST OF FUNCTIONS =====
+// ============================================
+
+// HAMBURGER MENU
 document.getElementById('hamburger').addEventListener('click', function() {
     document.getElementById('navLinks').classList.toggle('open');
 });
 
-// ============================================
 // TOP HOUSES COLLAPSIBLE
-// ============================================
 topHousesToggle.addEventListener('click', function() {
     topHousesCollapsed = !topHousesCollapsed;
     const grid = document.querySelector('.top-houses-grid');
@@ -209,9 +364,7 @@ topHousesToggle.addEventListener('click', function() {
     if (icon) icon.classList.toggle('collapsed');
 });
 
-// ============================================
 // POPUP CONTROLS
-// ============================================
 function closePopup() {
     voterPopup.style.display = 'none';
     document.body.style.overflow = 'auto';
@@ -225,9 +378,7 @@ document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') closePopup();
 });
 
-// ============================================
 // EDIT POPUP CONTROLS
-// ============================================
 editPopupClose.addEventListener('click', function() {
     editPopup.style.display = 'none';
 });
@@ -238,73 +389,93 @@ editPopup.addEventListener('click', function(e) {
 });
 
 // ============================================
-// LOGIN/LOGOUT EVENTS
+// POPULATE FILTERS
 // ============================================
-loginForm.addEventListener('submit', handleLogin);
-logoutBtn.addEventListener('click', handleLogout);
-
-// ============================================
-// FETCH ALL VOTERS
-// ============================================
-async function fetchVoters() {
-    if (isLoading) return;
-    isLoading = true;
-    voterList.innerHTML = '<div class="loading-state">Loading voters...</div>';
-
-    try {
-        const { count, error: countError } = await supabaseClient
-            .from('full_import')
-            .select('*', { count: 'exact', head: true });
-        if (countError) throw countError;
-
-        let allData = [];
-        let page = 0;
-        const pageSize = 1000;
-        let hasMore = true;
-
-        while (hasMore) {
-            const from = page * pageSize;
-            const to = from + pageSize - 1;
-            const { data, error } = await supabaseClient
-                .from('full_import')
-                .select('*')
-                .range(from, to)
-                .order('image_number', { ascending: true });
-            if (error) throw error;
-            if (data && data.length > 0) {
-                allData = allData.concat(data);
-                page++;
-            }
-            if (!data || data.length < pageSize) {
-                hasMore = false;
-            }
-        }
-
-        allVoters = allData || [];
-        filteredVoters = [...allVoters];
-
-        populateFilters(allVoters);
-        renderTopHouses(allVoters);
-        updateStats(allVoters);
-        renderAgeAnalytics(allVoters);
-        renderList(filteredVoters);
-
-        if (gallerySection.style.display !== 'none') {
-            galleryPage = 1;
-            renderGallery(filteredVoters);
-        }
-
-    } catch (error) {
-        console.error('Error:', error);
-        voterList.innerHTML =
-            `<div class="error-box">❌ Failed to load voters.<br /><small>${error.message}</small></div>`;
-    } finally {
-        isLoading = false;
+function populateFilters(voters) {
+    if (selectedParty) {
+        partyFilter.innerHTML = `<option value="${selectedParty}" selected>${selectedParty}</option>`;
     }
+
+    const houses = [...new Set(voters.map(v => v.house).filter(Boolean))].sort();
+    houseFilter.innerHTML = '<option value="">All Houses</option>';
+    houses.forEach(h => {
+        const option = document.createElement('option');
+        option.value = h;
+        option.textContent = h;
+        houseFilter.appendChild(option);
+    });
+
+    renderFilterChips(voters);
 }
 
 // ============================================
-// AGE ANALYTICS
+// RENDER FILTER CHIPS
+// ============================================
+function renderFilterChips(voters) {
+    const chips = [];
+
+    const males = voters.filter(v => normalizeSex(v.sex) === 'Male').length;
+    const females = voters.filter(v => normalizeSex(v.sex) === 'Female').length;
+    if (males > 0) chips.push({ label: `👨 Male (${males})`, value: 'sex:Male', type: 'sex' });
+    if (females > 0) chips.push({ label: `👩 Female (${females})`, value: 'sex:Female', type: 'sex' });
+
+    if (selectedParty) {
+        const count = voters.length;
+        chips.push({ label: `🏛️ ${selectedParty} (${count})`, value: `party:${selectedParty}`, type: 'party' });
+    }
+
+    filterChips.innerHTML = chips.map(chip => `
+        <span class="filter-chip" data-value="${chip.value}" data-type="${chip.type}">
+            ${chip.label}
+        </span>
+    `).join('');
+
+    document.querySelectorAll('.filter-chip').forEach(el => {
+        el.addEventListener('click', function() {
+            const [type, value] = this.dataset.value.split(':');
+            applyFilterChip(type, value);
+        });
+    });
+}
+
+// ============================================
+// APPLY FILTER CHIP
+// ============================================
+function applyFilterChip(type, value) {
+    if (type === 'sex') sexFilter.value = value;
+    else if (type === 'party') partyFilter.value = value;
+    else if (type === 'age') {
+        ageRangeFilter.value = value;
+    }
+    filterVoters();
+    document.querySelectorAll('.filter-chip').forEach(el => {
+        el.classList.toggle('active', el.dataset.value === `${type}:${value}`);
+    });
+}
+
+// ============================================
+// UPDATE STATS
+// ============================================
+function updateStats(voters) {
+    const total = voters.length;
+    const males = voters.filter(v => normalizeSex(v.sex) === 'Male').length;
+    const females = voters.filter(v => normalizeSex(v.sex) === 'Female').length;
+    const parties = selectedParty ? [selectedParty] : [...new Set(voters.map(v => v.party).filter(Boolean))];
+    const houses = [...new Set(voters.map(v => v.house).filter(Boolean))];
+    const ages = voters.map(v => parseInt(v.age)).filter(a => a > 0 && a < 120);
+    const avg = ages.length > 0 ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length) : 0;
+
+    totalVoters.textContent = total;
+    maleCount.textContent = males;
+    femaleCount.textContent = females;
+    partyCount.textContent = parties.length;
+    avgAge.textContent = avg;
+    houseCount.textContent = houses.length;
+    navCount.textContent = total;
+}
+
+// ============================================
+// RENDER AGE ANALYTICS
 // ============================================
 function renderAgeAnalytics(voters) {
     const ageGroups = {
@@ -414,104 +585,6 @@ function renderAgeAnalytics(voters) {
 }
 
 // ============================================
-// POPULATE FILTERS
-// ============================================
-function populateFilters(voters) {
-    const parties = [...new Set(voters.map(v => v.party).filter(Boolean))].sort();
-    partyFilter.innerHTML = '<option value="">All Parties</option>';
-    parties.forEach(p => {
-        const option = document.createElement('option');
-        option.value = p;
-        option.textContent = p;
-        partyFilter.appendChild(option);
-    });
-
-    const houses = [...new Set(voters.map(v => v.house).filter(Boolean))].sort();
-    houseFilter.innerHTML = '<option value="">All Houses</option>';
-    houses.forEach(h => {
-        const option = document.createElement('option');
-        option.value = h;
-        option.textContent = h;
-        houseFilter.appendChild(option);
-    });
-
-    renderFilterChips(voters);
-}
-
-// ============================================
-// RENDER FILTER CHIPS
-// ============================================
-function renderFilterChips(voters) {
-    const chips = [];
-
-    const males = voters.filter(v => normalizeSex(v.sex) === 'Male').length;
-    const females = voters.filter(v => normalizeSex(v.sex) === 'Female').length;
-    if (males > 0) chips.push({ label: `👨 Male (${males})`, value: 'sex:Male', type: 'sex' });
-    if (females > 0) chips.push({ label: `👩 Female (${females})`, value: 'sex:Female', type: 'sex' });
-
-    const partyCounts = {};
-    voters.forEach(v => {
-        const p = v.party || 'No Party';
-        partyCounts[p] = (partyCounts[p] || 0) + 1;
-    });
-    const topParties = Object.entries(partyCounts).sort((a, b) => b[1] - a[1]).slice(0, 4);
-    topParties.forEach(([party, count]) => {
-        if (party !== 'No Party') {
-            chips.push({ label: `${party} (${count})`, value: `party:${party}`, type: 'party' });
-        }
-    });
-
-    filterChips.innerHTML = chips.map(chip => `
-        <span class="filter-chip" data-value="${chip.value}" data-type="${chip.type}">
-            ${chip.label}
-        </span>
-    `).join('');
-
-    document.querySelectorAll('.filter-chip').forEach(el => {
-        el.addEventListener('click', function() {
-            const [type, value] = this.dataset.value.split(':');
-            applyFilterChip(type, value);
-        });
-    });
-}
-
-// ============================================
-// APPLY FILTER CHIP
-// ============================================
-function applyFilterChip(type, value) {
-    if (type === 'sex') sexFilter.value = value;
-    else if (type === 'party') partyFilter.value = value;
-    else if (type === 'age') {
-        ageRangeFilter.value = value;
-    }
-    filterVoters();
-    document.querySelectorAll('.filter-chip').forEach(el => {
-        el.classList.toggle('active', el.dataset.value === `${type}:${value}`);
-    });
-}
-
-// ============================================
-// UPDATE STATS
-// ============================================
-function updateStats(voters) {
-    const total = voters.length;
-    const males = voters.filter(v => normalizeSex(v.sex) === 'Male').length;
-    const females = voters.filter(v => normalizeSex(v.sex) === 'Female').length;
-    const parties = [...new Set(voters.map(v => v.party).filter(Boolean))];
-    const houses = [...new Set(voters.map(v => v.house).filter(Boolean))];
-    const ages = voters.map(v => parseInt(v.age)).filter(a => a > 0 && a < 120);
-    const avg = ages.length > 0 ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length) : 0;
-
-    totalVoters.textContent = total;
-    maleCount.textContent = males;
-    femaleCount.textContent = females;
-    partyCount.textContent = parties.length;
-    avgAge.textContent = avg;
-    houseCount.textContent = houses.length;
-    navCount.textContent = total;
-}
-
-// ============================================
 // RENDER TOP HOUSES
 // ============================================
 function renderTopHouses(voters) {
@@ -564,6 +637,9 @@ function showVoterPopup(voter) {
     const partyClass = (voter.party || '').toLowerCase();
     const address = [voter.house, voter.lives_in].filter(Boolean).join(', ') || 'N/A';
 
+    window.currentVoterId = voter.id;
+    window.currentHouse = voter.house;
+
     voterPopupContent.innerHTML = `
         <div class="popup-photo">
             ${photoUrl ? 
@@ -575,22 +651,127 @@ function showVoterPopup(voter) {
                 📷
             </div>
         </div>
+
         <div class="popup-name">${voter.name || 'Unknown'}</div>
         <div class="popup-id">🆔 ${voter.national_id || 'N/A'}</div>
-        <div class="popup-details">
-            <span class="label">Age</span><span class="value">${voter.age || 'N/A'}</span>
-            <span class="label">Sex</span><span class="value">${sexDisplay}</span>
-            <span class="label">Address</span><span class="value">${address}</span>
-            <span class="label">Mobile</span><span class="value">${voter.phone || 'N/A'}</span>
-            <span class="label">Party</span><span class="value">${voter.party || 'N/A'}</span>
+
+        <div class="popup-address">
+            <div class="address-label">📍 Address</div>
+            <div class="address-value">${address}</div>
         </div>
-        ${voter.party ? `<div class="popup-party ${partyClass}">${voter.party}</div>` : ''}
-        <button class="popup-edit-btn" onclick="openEditPopup(${voter.id})">
-            <i class="fas fa-edit"></i> Edit Voter
-        </button>
+
+        <div class="popup-details">
+            <span class="label">Age</span>
+            <span class="value">${voter.age || 'N/A'}</span>
+            <span class="label">Sex</span>
+            <span class="value">${sexDisplay}</span>
+            <span class="label">Phone</span>
+            <span class="value">${voter.phone || 'N/A'}</span>
+            <span class="label">Party</span>
+            <span class="value">${voter.party || 'N/A'}</span>
+        </div>
+
+        <form id="popupEditForm">
+            <div class="form-group">
+                <label><i class="fas fa-phone"></i> Phone</label>
+                <input type="text" id="popupPhone" placeholder="Enter phone number..." value="${voter.phone || ''}" />
+            </div>
+
+            <div class="form-group">
+                <label><i class="fas fa-check-circle"></i> Reach Status</label>
+                <select id="popupReachStatus">
+                    <option value="not-reached" ${voter.reach_status === 'reached' ? '' : 'selected'}>❌ Not Reached</option>
+                    <option value="reached" ${voter.reach_status === 'reached' ? 'selected' : ''}>✅ Reached</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label><i class="fas fa-vote-yea"></i> Vote Status</label>
+                <select id="popupVoteStatus">
+                    <option value="pending" ${voter.vote_status === 'pending' || !voter.vote_status ? 'selected' : ''}>⏳ Pending</option>
+                    <option value="will-vote" ${voter.vote_status === 'will-vote' ? 'selected' : ''}>🗳️ Will Vote</option>
+                    <option value="not-vote" ${voter.vote_status === 'not-vote' ? 'selected' : ''}>❌ Not Vote</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label><i class="fas fa-comment"></i> Remarks</label>
+                <textarea id="popupRemarks" placeholder="Add notes...">${voter.remarks || ''}</textarea>
+            </div>
+
+            <div class="popup-actions">
+                <button type="submit" class="btn-save"><i class="fas fa-save"></i> Save & Go to House</button>
+                <button type="button" class="btn-close" id="popupCloseBtn"><i class="fas fa-times"></i> Close</button>
+            </div>
+        </form>
     `;
 
     voterPopup.style.display = 'flex';
+
+    document.getElementById('popupEditForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const phone = document.getElementById('popupPhone').value.trim();
+        const reach_status = document.getElementById('popupReachStatus').value;
+        const vote_status = document.getElementById('popupVoteStatus').value;
+        const remarks = document.getElementById('popupRemarks').value.trim();
+
+        const updateData = {};
+        if (phone) updateData.phone = phone;
+        updateData.reach_status = reach_status;
+        updateData.vote_status = vote_status;
+        if (remarks) updateData.remarks = remarks;
+
+        try {
+            const { error } = await supabaseClient
+                .from('full_import')
+                .update(updateData)
+                .eq('id', voter.id);
+
+            if (error) throw error;
+
+            const index = allVoters.findIndex(v => v.id === voter.id);
+            if (index !== -1) {
+                allVoters[index] = { ...allVoters[index], ...updateData };
+            }
+
+            filteredVoters = [...allVoters];
+            renderList(filteredVoters);
+            renderAgeAnalytics(filteredVoters);
+            updateStats(filteredVoters);
+            renderTopHouses(filteredVoters);
+
+            if (gallerySection.style.display !== 'none') {
+                renderGallery(filteredVoters);
+            }
+
+            voterPopup.style.display = 'none';
+            document.body.style.overflow = 'auto';
+
+            const msg = document.createElement('div');
+            msg.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#2ecc71;color:white;padding:10px 24px;border-radius:10px;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(46,204,113,0.3);';
+            msg.innerHTML = '✅ Voter updated!';
+            document.body.appendChild(msg);
+            setTimeout(() => msg.remove(), 2000);
+
+            setTimeout(() => {
+                if (window.currentHouse) {
+                    houseFilter.value = window.currentHouse;
+                    filterVoters();
+                    document.querySelector('.voter-list-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 500);
+
+        } catch (error) {
+            console.error('Error updating voter:', error);
+            alert('❌ Failed to update voter: ' + error.message);
+        }
+    });
+
+    document.getElementById('popupCloseBtn').addEventListener('click', function() {
+        voterPopup.style.display = 'none';
+        document.body.style.overflow = 'auto';
+    });
 }
 
 // ============================================
@@ -688,6 +869,7 @@ function renderList(voters) {
         const photoUrl = v.photo_url || '';
         const partyClass = (v.party || '').toLowerCase();
         const sexIcon = normalizeSex(v.sex) === 'Male' ? '♂️' : normalizeSex(v.sex) === 'Female' ? '♀️' : '';
+        const address = [v.house, v.lives_in].filter(Boolean).join(', ') || 'N/A';
 
         html += `
             <div class="voter-item" data-id="${v.id}">
@@ -701,7 +883,7 @@ function renderList(voters) {
                 <div class="info">
                     <span class="name">${v.name || 'Unknown'}</span>
                     <span class="detail"><i class="fas fa-calendar-alt"></i> ${v.age || 'N/A'}</span>
-                    <span class="detail"><i class="fas fa-home"></i> ${v.house || 'N/A'}</span>
+                    <span class="detail"><i class="fas fa-home"></i> ${address}</span>
                     ${sexIcon ? `<span class="detail">${sexIcon}</span>` : ''}
                 </div>
                 ${v.party ? `<span class="party-badge ${partyClass}">${v.party}</span>` : ''}
@@ -815,7 +997,7 @@ function showGalleryView() {
 }
 
 // ============================================
-// FILTER VOTERS - WITH AGE RANGE DROPDOWN
+// FILTER VOTERS
 // ============================================
 function filterVoters() {
     const search = searchInput.value.toLowerCase().trim();
@@ -881,7 +1063,7 @@ function filterVoters() {
 function resetFilters() {
     searchInput.value = '';
     sexFilter.value = '';
-    partyFilter.value = '';
+    partyFilter.value = selectedParty || '';
     houseFilter.value = '';
     ageRangeFilter.value = '';
 
@@ -937,5 +1119,10 @@ galleryNext.addEventListener('click', () => {
 // INIT
 // ============================================
 console.log('🔐 Voter Management System loaded');
-console.log('👤 Login with: admin / admin123');
-checkLogin();
+console.log('🏛️ MDP (Yellow) & PNC (Turquoise)');
+
+// Check for saved session
+if (!checkSession()) {
+    partySelection.classList.remove('hidden');
+    mainApp.style.display = 'none';
+}
