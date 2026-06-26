@@ -91,8 +91,30 @@ document.getElementById('hamburger').addEventListener('click', function() {
 // ============================================
 topHousesToggle.addEventListener('click', function() {
     topHousesCollapsed = !topHousesCollapsed;
-    document.querySelector('.top-houses-grid').classList.toggle('collapsed');
-    document.querySelector('.toggle-icon').classList.toggle('collapsed');
+    const grid = document.querySelector('.top-houses-grid');
+    const icon = document.querySelector('.toggle-icon');
+    if (grid) grid.classList.toggle('collapsed');
+    if (icon) icon.classList.toggle('collapsed');
+});
+
+// ============================================
+// CLOSE POPUP
+// ============================================
+voterPopupClose.addEventListener('click', function() {
+    voterPopup.style.display = 'none';
+});
+
+voterPopup.addEventListener('click', function(e) {
+    if (e.target === this) {
+        this.style.display = 'none';
+    }
+});
+
+// ESC key to close popup
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        voterPopup.style.display = 'none';
+    }
 });
 
 // ============================================
@@ -236,6 +258,7 @@ async function fetchVoters() {
 // POPULATE FILTERS
 // ============================================
 function populateFilters(voters) {
+    // Party filter
     const parties = [...new Set(voters.map(v => v.party).filter(Boolean))].sort();
     partyFilter.innerHTML = '<option value="">All Parties</option>';
     parties.forEach(p => {
@@ -245,6 +268,7 @@ function populateFilters(voters) {
         partyFilter.appendChild(option);
     });
 
+    // House filter
     const houses = [...new Set(voters.map(v => v.house).filter(Boolean))].sort();
     houseFilter.innerHTML = '<option value="">All Houses</option>';
     houses.forEach(h => {
@@ -448,7 +472,7 @@ function renderTopHouses(voters) {
         const medals = ['🥇', '🥈', '🥉'];
         const medal = index < 3 ? medals[index] : `#${index + 1}`;
         html += `
-            <div class="top-house" onclick="filterByHouse('${house}')">
+            <div class="top-house" data-house="${house}">
                 <span class="house-name">${medal} ${house}</span>
                 <span class="house-count">${count} voters</span>
             </div>
@@ -456,19 +480,73 @@ function renderTopHouses(voters) {
     });
 
     topHouses.innerHTML = html;
+
+    // Add click listeners to top houses
+    document.querySelectorAll('.top-house').forEach(el => {
+        el.addEventListener('click', function() {
+            const house = this.dataset.house;
+            filterByHouse(house);
+        });
+    });
 }
 
 // ============================================
 // FILTER BY HOUSE
 // ============================================
-window.filterByHouse = function(house) {
+function filterByHouse(house) {
     houseFilter.value = house;
     filterVoters();
     document.querySelector('.voter-table-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
-};
+}
 
 // ============================================
-// RENDER TABLE - COMPACT
+// SHOW VOTER POPUP
+// ============================================
+function showVoterPopup(id) {
+    const voter = allVoters.find(v => v.id === id);
+    if (!voter) {
+        console.error('Voter not found:', id);
+        return;
+    }
+
+    const photoUrl = voter.photo_url || '';
+    const sexDisplay = getSexDisplay(voter.sex);
+    const partyClass = (voter.party || '').toLowerCase();
+    const address = [voter.house, voter.lives_in].filter(Boolean).join(', ') || 'N/A';
+
+    voterPopupContent.innerHTML = `
+        <div class="popup-photo">
+            ${photoUrl ? 
+                `<img src="${photoUrl}" alt="${voter.name}" 
+                      onerror="this.style.display='none'; this.parentElement.querySelector('.placeholder').style.display='flex';" />` :
+                ''
+            }
+            <div class="placeholder" style="${photoUrl ? 'display:none;' : 'display:flex;'} align-items:center; justify-content:center; width:100%; height:100%;">
+                📷
+            </div>
+        </div>
+        <div class="popup-name">${voter.name || 'Unknown'}</div>
+        <div class="popup-id">🆔 ${voter.national_id || 'N/A'}</div>
+        <div class="popup-details">
+            <span class="label">Age</span>
+            <span class="value">${voter.age || 'N/A'}</span>
+            <span class="label">Sex</span>
+            <span class="value">${sexDisplay}</span>
+            <span class="label">Address</span>
+            <span class="value">${address}</span>
+            <span class="label">Mobile</span>
+            <span class="value">${voter.phone || 'N/A'}</span>
+            <span class="label">National ID</span>
+            <span class="value">${voter.national_id || 'N/A'}</span>
+        </div>
+        ${voter.party ? `<div class="popup-party ${partyClass}">${voter.party}</div>` : ''}
+    `;
+
+    voterPopup.style.display = 'flex';
+}
+
+// ============================================
+// RENDER TABLE - COMPACT WITH EVENT LISTENERS
 // ============================================
 function renderTable(voters) {
     const totalPages = Math.max(1, Math.ceil(voters.length / pageSize));
@@ -507,7 +585,7 @@ function renderTable(voters) {
                 <td>${v.house || 'N/A'}</td>
                 <td>${v.party ? `<span class="party-badge ${partyClass}">${v.party}</span>` : '—'}</td>
                 <td>
-                    <button class="view-btn" onclick="showVoterPopup('${v.id}')">
+                    <button class="view-btn" data-id="${v.id}">
                         <i class="fas fa-eye"></i> View
                     </button>
                 </td>
@@ -517,63 +595,15 @@ function renderTable(voters) {
 
     tableBody.innerHTML = html;
     updatePagination(voters.length, totalPages);
+
+    // Add click listeners to view buttons
+    document.querySelectorAll('.view-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const id = parseInt(this.dataset.id);
+            showVoterPopup(id);
+        });
+    });
 }
-
-// ============================================
-// SHOW VOTER POPUP
-// ============================================
-window.showVoterPopup = function(id) {
-    const voter = allVoters.find(v => v.id === id);
-    if (!voter) return;
-
-    const photoUrl = voter.photo_url || '';
-    const sexDisplay = getSexDisplay(voter.sex);
-    const partyClass = (voter.party || '').toLowerCase();
-    const address = [voter.house, voter.lives_in].filter(Boolean).join(', ') || 'N/A';
-
-    voterPopupContent.innerHTML = `
-        <div class="popup-photo">
-            ${photoUrl ? 
-                `<img src="${photoUrl}" alt="${voter.name}" 
-                      onerror="this.style.display='none'; this.parentElement.querySelector('.placeholder').style.display='flex';" />` :
-                ''
-            }
-            <div class="placeholder" style="${photoUrl ? 'display:none;' : 'display:flex;'} align-items:center; justify-content:center; width:100%; height:100%;">
-                📷
-            </div>
-        </div>
-        <div class="popup-name">${voter.name || 'Unknown'}</div>
-        <div class="popup-id">🆔 ${voter.national_id || 'N/A'}</div>
-        <div class="popup-details">
-            <span class="label">Age</span>
-            <span class="value">${voter.age || 'N/A'}</span>
-            <span class="label">Sex</span>
-            <span class="value">${sexDisplay}</span>
-            <span class="label">Address</span>
-            <span class="value">${address}</span>
-            <span class="label">Mobile</span>
-            <span class="value">${voter.phone || 'N/A'}</span>
-            <span class="label">National ID</span>
-            <span class="value">${voter.national_id || 'N/A'}</span>
-        </div>
-        ${voter.party ? `<div class="popup-party ${partyClass}">${voter.party}</div>` : ''}
-    `;
-
-    voterPopup.style.display = 'flex';
-};
-
-// ============================================
-// CLOSE POPUP
-// ============================================
-voterPopupClose.addEventListener('click', function() {
-    voterPopup.style.display = 'none';
-});
-
-voterPopup.addEventListener('click', function(e) {
-    if (e.target === this) {
-        this.style.display = 'none';
-    }
-});
 
 // ============================================
 // UPDATE PAGINATION
